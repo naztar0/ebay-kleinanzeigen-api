@@ -56,7 +56,7 @@ async def get_inserate_with_details(
         if not listings_result.get("success", False):
             raise HTTPException(status_code=500, detail="Failed to fetch listings")
 
-        listings = listings_result.get("results", [])
+        listings = listings_result.get("data", [])
         if not listings:
             return {
                 "success": True,

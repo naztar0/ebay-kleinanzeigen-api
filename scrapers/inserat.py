@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from libs.websites import kleinanzeigen as lib
 import re
 import time
+import random
 from utils.performance import PageMetrics
 from utils.error_handling import (
     WarningManager,
@@ -175,7 +176,7 @@ async def get_inserate_details_optimized(listing_id: str, retry_count: int = 2) 
                             affected_items=[listing_id],
                             impact_description=f"Temporary delay before retry due to {structured_error.category.value} error",
                         )
-                        wait_time = (2**attempt) + asyncio.trandom.uniform(0, 1)
+                        wait_time = (2**attempt) + random.uniform(0, 1)
                         await asyncio.sleep(wait_time)
                         continue
 

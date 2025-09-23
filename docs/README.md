@@ -24,20 +24,6 @@
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## Project Structure
-
-This project is organized into the following directories:
-
-- `config/`: Configuration files and documentation
-- `docs/`: Project documentation
-- `libs/`: Library code for website-specific scraping logic
-- `routers/`: FastAPI router definitions
-- `scrapers/`: Scraping implementation logic
-- `tests/`: Test suite
-- `utils/`: Utility functions
-
-Each directory contains a README.md file with detailed information about its contents.
-
 ## Getting Started
 
 ### Want to skip the setup?

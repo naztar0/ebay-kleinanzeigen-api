@@ -1,3 +1,5 @@
+import sys
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from slowapi.errors import RateLimitExceeded
@@ -11,6 +13,10 @@ from routers import (
 )
 from utils.browser import OptimizedPlaywrightManager
 from utils.asyncio_optimizations import EventLoopOptimizer
+
+# Ensure Windows supports asyncio subprocesses (required by Playwright)
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Global browser manager instance for sharing across all endpoints
 browser_manager = None

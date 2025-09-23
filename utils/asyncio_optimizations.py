@@ -6,6 +6,7 @@ to maximize performance and minimize memory usage.
 """
 
 import asyncio
+import sys
 import time
 import gc
 import weakref
@@ -160,9 +161,17 @@ class EventLoopOptimizer:
 
     @staticmethod
     def setup_uvloop():
-        """Setup uvloop for 2-4x performance improvement."""
+        """Setup best-available event loop policy.
+
+        On non-Windows: prefer uvloop if available.
+        On Windows: ensure WindowsSelectorEventLoopPolicy for subprocess support (Playwright).
+        """
         try:
-            import uvloop
+            if sys.platform == "win32":
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+                return False
+
+            import uvloop  # type: ignore
 
             asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
             return True
