@@ -1,11 +1,13 @@
 import asyncio
+import random
+import re
+import time
+from typing import Any, Dict, Optional
+
 import httpx
 from bs4 import BeautifulSoup
 from fastapi import HTTPException
 from libs.websites import kleinanzeigen as lib
-import re
-import time
-import random
 from utils.performance import PageMetrics
 from utils.error_handling import (
     WarningManager,
@@ -15,7 +17,52 @@ from utils.error_handling import (
 )
 
 
-async def get_inserate_details_httpx(url: str, client: httpx.AsyncClient):
+def _extract_numeric_ad_id(raw_id: str) -> Optional[str]:
+    if not raw_id:
+        return None
+    if match := re.match(r"(\d+)", raw_id):
+        return match[1]
+    first_segment = raw_id.split("-", 1)[0]
+    digits = re.sub(r"\D", "", first_segment)
+    return digits or first_segment or None
+
+
+async def fetch_listing_views(listing_id: str, client: httpx.AsyncClient) -> Optional[str]:
+    ad_id = _extract_numeric_ad_id(listing_id)
+    if not ad_id:
+        return None
+    try:
+        response = await client.get(
+            "https://www.kleinanzeigen.de/s-vac-inc-get.json",
+            params={"adId": ad_id},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                " AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0"
+                " Safari/537.36",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        visits = payload.get("numVisits")
+        if isinstance(visits, int):
+            return str(visits)
+        visits_str = payload.get("numVisitsStr")
+        if isinstance(visits_str, str):
+            clean_value = visits_str.lstrip("0")
+            return clean_value or "0"
+    except httpx.HTTPError as exc:
+        # Views are informational; prefer failing open to avoid breaking the endpoint.
+        print(f"[WARN] Unable to fetch views for {listing_id}: {exc}")
+    except ValueError as exc:
+        print(f"[WARN] Invalid views payload for {listing_id}: {exc}")
+    return None
+
+
+async def get_inserate_details_httpx(
+    url: str, client: httpx.AsyncClient, listing_id: str
+) -> Dict[str, Any]:
     try:
         response = await client.get(url, timeout=20)
         response.raise_for_status()  # Raise an exception for bad status codes
@@ -37,7 +84,6 @@ async def get_inserate_details_httpx(url: str, client: httpx.AsyncClient):
         )
         price_element = lib.get_element_content(soup, "#viewad-price")
         price = lib.parse_price(price_element)
-        views = lib.get_element_content(soup, "#viewad-cntr-num")
         description = lib.get_element_content(soup, "#viewad-description-text")
         if description:
             description = re.sub(r"[ \t]+", " ", description).strip()
@@ -52,14 +98,28 @@ async def get_inserate_details_httpx(url: str, client: httpx.AsyncClient):
             soup, ".boxedarticle--details--shipping"
         )
         shipping = None
+        shipping_cost: Optional[str] = None
         if shipping_text:
             if "Nur Abholung" in shipping_text:
                 shipping = "pickup"
             elif "Versand" in shipping_text:
                 shipping = "shipping"
+                cost_match = re.search(
+                    r"Versand\s*(?:ab)?\s*([0-9.,]+)\s*€", shipping_text, re.IGNORECASE
+                )
+                if cost_match:
+                    shipping_cost = f"{cost_match.group(1)} €"
+                else:
+                    generic_cost = re.search(
+                        r"([0-9.,]+)\s*€", shipping_text, re.IGNORECASE
+                    )
+                    if generic_cost:
+                        shipping_cost = f"{generic_cost.group(1)} €"
 
         location = lib.get_location(soup)
         extra_info = lib.get_extra_info(soup)
+        views_api = await fetch_listing_views(ad_id or listing_id, client)
+        views_value = views_api or "0"
 
         # Status is not easily available without JS, so we'll default to active
         status = "active"
@@ -73,8 +133,9 @@ async def get_inserate_details_httpx(url: str, client: httpx.AsyncClient):
             "status": status,
             "price": price,
             "delivery": shipping,
+            "delivery_cost": shipping_cost,
             "location": location,
-            "views": views or "0",
+            "views": views_value,
             "description": description,
             "images": images,
             "details": details,
@@ -93,7 +154,7 @@ async def get_inserate_details_httpx(url: str, client: httpx.AsyncClient):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-async def get_inserate_details_optimized(listing_id: str, retry_count: int = 2) -> dict:
+async def get_inserate_details_optimized(listing_id: str, retry_count: int = 2) -> Dict[str, Any]:
     from utils.performance import PerformanceTracker
 
     logger = ErrorLogger("inserat_scraper_httpx")
@@ -115,7 +176,9 @@ async def get_inserate_details_optimized(listing_id: str, retry_count: int = 2) 
             for attempt in range(retry_count + 1):
                 start_time = time.time()
                 try:
-                    details = await get_inserate_details_httpx(url, client)
+                    details = await get_inserate_details_httpx(
+                        url, client, listing_id
+                    )
 
                     if not details or not details.get("id"):
                         warning_manager.add_warning(

@@ -40,22 +40,20 @@ def get_seller_details(soup: BeautifulSoup) -> Dict[str, Optional[str]]:
     result = {"name": None, "since": None, "type": "private", "badges": []}
     try:
         _get_seller_details_(soup, result)
-    except Exception as e:
-        print(f"Error getting seller details: {str(e)}")
+    except Exception as exc:
+        print(f"Error getting seller details: {str(exc)}")
     return result
 
 
 def _get_seller_details_(soup, result):
     result["name"] = get_element_content(soup, ".userprofile-vip")
 
-    if seller_type_element := soup.select_one(".userprofile-vip-details-text"):
-        seller_type_text = seller_type_element.get_text(strip=True)
-        if "Gewerblicher" in seller_type_text:
+    for detail_element in soup.select(".userprofile-vip-details-text"):
+        detail_text = detail_element.get_text(strip=True)
+        if "Gewerblicher" in detail_text:
             result["type"] = "business"
-
-    since_selector = ".userprofile-vip-details-text:has-text('Aktiv seit')"
-    if seller_since := get_element_content(soup, since_selector):
-        result["since"] = seller_since.replace("Aktiv seit ", "").strip()
+        if detail_text.startswith("Aktiv seit"):
+            result["since"] = detail_text.replace("Aktiv seit", "").strip()
 
     badges_selector = ".userprofile-vip-badges .userbadge-tag"
     badges = get_elements_content(soup, badges_selector)
@@ -67,11 +65,10 @@ def get_details(soup: BeautifulSoup) -> Dict[str, str]:
     try:
         detail_items = soup.select("#viewad-details .addetailslist--detail")
         for item in detail_items:
-            label_element = item.find(class_="addetailslist--detail--label")
-            value_element = item.find(class_="addetailslist--detail--value")
-            if label_element and value_element:
-                label = label_element.get_text(strip=True)
-                value = value_element.get_text(strip=True)
+            parts = list(item.stripped_strings)
+            if len(parts) >= 2:
+                label = parts[0]
+                value = parts[-1]
                 details[label] = value
     except Exception as e:
         print(f"Error getting details: {str(e)}")
@@ -95,23 +92,26 @@ def get_location(soup: BeautifulSoup) -> Dict[str, str]:
     if not location_text:
         return {"zip": "", "city": "", "state": ""}
 
-    location_parts = location_text.split()
-    zip_code = location_parts[0]
-    city = " ".join(location_parts[1:])
-    # State information is not reliably available in the same way
-    return {"zip": zip_code, "city": city, "state": ""}
+    zip_code, remainder = (location_text.split(" ", 1) + [""])[:2]
+    city = remainder.strip()
+    state = ""
+
+    if " - " in remainder:
+        state_part, city_part = remainder.split(" - ", 1)
+        state = state_part.strip()
+        city = city_part.strip()
+
+    return {"zip": zip_code, "city": city, "state": state}
 
 
 def get_extra_info(soup: BeautifulSoup) -> Dict[str, Optional[str]]:
-    result: Dict[str, Optional[str]] = {"created_at": None, "views": "0"}
+    result: Dict[str, Optional[str]] = {"created_at": None}
     try:
         if date_element := soup.select_one(
             "#viewad-extra-info > div:nth-child(1) > span"
         ):
             result["created_at"] = date_element.get_text(strip=True)
 
-        if views_element := soup.select_one("#viewad-cntr-num"):
-            result["views"] = views_element.get_text(strip=True)
     except Exception as e:
         print(f"Error getting extra info: {str(e)}")
     return result
