@@ -1,19 +1,23 @@
 [project]
 name = "ebay-kleinanzeigen-api"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Refined Kleinanzeigen scraping API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiohttp>=3.12.15",
     "beautifulsoup4>=4.13.4",
     "fastapi>=0.115.6",
     "httpx>=0.28.1",
     "loguru>=0.7.3",
-    "playwright>=1.49.0",
+    "pydantic-settings>=2.6.1",
     "pytest>=8.4.1",
-    "python-multipart>=0.0.20",
-    "slowapi>=0.1.9",
     "uvicorn>=0.34.0",
-    "uvloop>=0.21.0; sys_platform != 'win32'",
+]
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.2",
 ]

@@ -26,17 +26,13 @@
 
 ## Project Structure
 
-This project is organized into the following directories:
+This project now follows a modern `src/` based layout:
 
-- `config/`: Configuration files and documentation
-- `docs/`: Project documentation
-- `libs/`: Library code for website-specific scraping logic
-- `routers/`: FastAPI router definitions
-- `scrapers/`: Scraping implementation logic
-- `tests/`: Test suite
-- `utils/`: Utility functions
-
-Each directory contains a README.md file with detailed information about its contents.
+- `src/app/core/`: Configuration and logging setup
+- `src/app/api/routes/`: FastAPI routers
+- `src/app/models/`: Pydantic request/response models
+- `src/app/services/`: Scraper and HTTP utilities
+- `tests/`: Test suite (to be updated)
 
 ## Getting Started
 
@@ -47,8 +43,16 @@ Visit [kleinanzeigen-agent.de](https://kleinanzeigen-agent.de/features/developer
 ### Prerequisites
 
 - Python 3.12 or higher
-- pip (Python package manager)
-- Playwright
+- [uv](https://github.com/astral-sh/uv) package manager (recommended)
+
+### Installation with uv (recommended)
+
+```sh
+uv sync
+uv run uvicorn src.app.main:app --reload
+```
+
+### Installation with pip
 
 ### Installation
 
@@ -63,17 +67,12 @@ cd ebay-kleinanzeigen-api
 
 ```sh
 pip install -r requirements.txt
-playwright install chromium
 ```
 
 3. Start the API
 
 ```sh
-# Windows
-uvicorn main:app
-
-# macOS/Linux (optional auto-reload for development)
-uvicorn main:app --reload
+uvicorn src.app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`
@@ -94,10 +93,10 @@ uv sync
 
 ```sh
 # Windows
-uv run uvicorn main:app
+uv run uvicorn src.app.main:app
 
 # macOS/Linux (optional auto-reload for development)
-uv run uvicorn main:app --reload
+uv run uvicorn src.app.main:app --reload
 ```
 
 ### Installation using Docker
@@ -118,54 +117,27 @@ The API will be available at `http://localhost:8000`
 
 ### API Endpoints
 
-#### 1. Fetch Listings (Standard)
+#### 1. Fetch Listings
 
-**Endpoint:** `GET /inserate`
+**Endpoint:** `GET /v1/listings`
 
-**Description:** Retrieves a list of listings based on search criteria.
-
-##### Query Parameters
-
-- **`query`** *(string, optional)*: The search term (e.g., "fahrrad" to search for bicycles).
-- **`location`** *(string, optional)*: The location or postal code to narrow the search (e.g., `10178` for Berlin).
-- **`radius`** *(integer, optional)*: The search radius in kilometers from the specified location (e.g., `5` for a 5 km radius).
-- **`min_price`** *(integer, optional)*: The minimum price in Euros for the listings (e.g., `200` for at least 200 Euros).
-- **`max_price`** *(integer, optional)*: The maximum price in Euros for the listings (e.g., `500` for at most 500 Euros).
-- **`page_count`** *(integer, optional)*: The number of pages to search or return (e.g., `5` for the first 5 pages, default is 1, max: 20 pages).
-
-##### Example Request
-
-```http
-GET /inserate?query=fahrrad&location=10178&radius=5&min_price=200&page_count=5
-```
+**Description:** Retrieves listings as summary records.
 
 #### 2. Fetch Listing Details
 
-**Endpoint:** `GET /inserat/{id}`
+**Endpoint:** `GET /v1/listings/{listing_id}`
 
-**Description:** Retrieves detailed information about a specific listing.
+**Description:** Retrieves a single listing with full detail.
 
-##### Path Parameters
+#### 3. Fetch Listings with Details
 
-- **`id`** *(string)*: The unique identifier of the listing to fetch details for.
-
-##### Example Request
-
-```http
-GET /inserat/12345
-```
-
-#### 3. Fetch Listings with Details (Combined)
-
-**Endpoint:** `GET /inserate-detailed`
+**Endpoint:** `GET /v1/listings-detailed`
 
 **Description:** Retrieves listings and their detailed information in a single request.
 
 ##### Query Parameters
 
-Same as `/inserate` endpoint, plus:
-
-- **`max_concurrent_details`** *(integer, optional)*: Maximum concurrent detail fetches (default: 10, max: 20).
+Same as `/v1/listings` plus `max_concurrent_details` (default 10, max 20).
 
 ##### Example Request
 
@@ -241,30 +213,48 @@ All API endpoints return responses in the following JSON format:
 
 ## Performance Features
 
-## 📊 Performance Benchmarks
+## Performance Benchmarks
 
-Performance tests conducted on **Arch Linux** with **Intel i7-1260P** processor:
+You can run repeatable benchmarks locally using the helper script in `scripts/benchmark.py`. Make sure the API server is already running, then execute:
 
-| Endpoint | Operation | Avg Time | Min Time | Max Time | Success Rate | Results |
-|----------|-----------|----------|----------|----------|--------------|---------|
-| Root | API status check | 0.004s | 0.001s | 0.009s | 100% | - |
-| Listings | 1 page search | 1.209s | 1.081s | 1.596s | 100% | 25 |
-| Listings | 5 pages search | 2.436s | 2.328s | 2.532s | 100% | 125 |
-| Listings | 10 pages search | 4.989s | 4.790s | 5.229s | 100% | 250 |
-| Details | Single listing details | 1.072s | 0.928s | 1.276s | 100% | 1 |
-| Combined | 1 page + details | 9.058s | 8.804s | 9.319s | 100% | 25 |
-| Combined | 2 pages + details | 17.512s | 17.063s | 18.038s | 100% | 50 |
+```bash
+uv run python scripts/benchmark.py \
+  --iterations 3 \
+  --page-counts 1,3,5 \
+  --max-concurrency 5,10,15 \
+  --query pc \
+  --chart-output assets/benchmarks.png
+```
 
-### Performance Highlights
+This script hits
 
-- **Single page search**: ~1.2s average response time
-- **10-page search**: ~5.0s average response time  
-- **Individual listing details**: ~1.1s average response time
-- **Combined search + details**: ~9.1s average for 1 page with full details
+- `GET /v1/listings` for each requested `page_count`
+- `GET /v1/listings/{listing_id}` using listing `3198895972`
+- `GET /v1/listings-detailed` for each `page_count` combined with the `max_concurrency` values
 
-*All tests performed with uvloop optimization and browser context pooling enabled.*
+The output is a table summarising the average, min and max response times across the chosen iterations and saves a chart overlaying the results to `assets/benchmarks.png`. Use `--output json` if you prefer JSON payloads for automation.
 
-### 🚀 Technical Features
+### Sample Benchmark Results
+
+| Endpoint | Parameters | Avg (s) | Min (s) | Max (s) |
+|----------|------------|--------:|--------:|--------:|
+| `/v1/listings` | `query=pc`, `pages=1` | 0.282 | 0.263 | 0.307 |
+| `/v1/listings` | `query=pc`, `pages=3` | 0.796 | 0.739 | 0.899 |
+| `/v1/listings` | `query=pc`, `pages=5` | 1.439 | 1.327 | 1.588 |
+| `/v1/listings/{id}` | `id=3198895972` | 0.428 | 0.366 | 0.465 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=5` | 2.530 | 2.369 | 2.826 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=10` | 2.017 | 1.997 | 2.033 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=15` | 1.957 | 1.876 | 2.060 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=5` | 6.837 | 6.373 | 7.459 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=10` | 5.874 | 5.665 | 6.264 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=15` | 5.662 | 5.605 | 5.739 |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=5` | 11.546 | 11.420 | 11.652 |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=10` | 9.428 | 9.219 | 9.605 |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=15` | 9.414 | 9.204 | 9.524 |
+
+![Benchmark chart](assets/benchmarks.png)
+
+### Technical Features
 
 - **uvloop Integration**: High-performance asyncio event loop
 - **Context Pooling**: Efficient browser resource reuse
