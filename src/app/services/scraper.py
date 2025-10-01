@@ -278,8 +278,6 @@ class KleinanzeigenScraperService:
         from urllib.parse import urlencode
 
         params = {}
-        if query:
-            params["keywords"] = query
         if location:
             params["locationStr"] = location
         if radius:
@@ -289,14 +287,23 @@ class KleinanzeigenScraperService:
         if min_price is not None or max_price is not None:
             min_segment = str(min_price) if min_price is not None else ""
             max_segment = str(max_price) if max_price is not None else ""
-            price_path = f"/preis:{min_segment}:{max_segment}"
+            price_path = f"preis:{min_segment}:{max_segment}"
 
-        path_segments = ["s-suche"]
+        # Build path: /s-{price_path}/{query}/k0 or /s-{query}/k0
+        path_segments = []
+
         if price_path:
-            path_segments.append(price_path.strip("/"))
+            path_segments.append(f"s-{price_path}")
+        else:
+            path_segments.append("s")
 
         if query:
-            path_segments.append(self._slugify(query))
+            slugified_query = self._slugify(query)
+            # If we don't have price, combine with s- prefix
+            if not price_path:
+                path_segments[-1] = f"s-{slugified_query}"
+            else:
+                path_segments.append(slugified_query)
 
         path_segments.append("k0")
 
