@@ -67,8 +67,29 @@ class ListingSummary(BaseModel):
             return None
 
 
+class PaginationMetadata(BaseModel):
+    """Metadata about pagination and search results."""
+
+    pages_requested: int = Field(..., ge=1, description="Number of pages requested")
+    pages_fetched: int = Field(
+        ..., ge=0, description="Number of pages actually fetched"
+    )
+    start_page: int = Field(default=1, ge=1, description="Starting page number")
+    end_page: int = Field(..., ge=1, description="Ending page number")
+    total_available_results: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Total results available from search (if detected)",
+    )
+    results_per_page: int = Field(default=25, ge=1, description="Results per page")
+    duplicates_removed: int = Field(
+        default=0, ge=0, description="Number of duplicate listings removed"
+    )
+
+
 class ListingsResponse(BaseModel):
     success: bool = True
     results: List[ListingSummary] = Field(default_factory=list)
     total_results: int = Field(..., ge=0)
+    pagination: Optional[PaginationMetadata] = None
     time_taken: float = Field(..., ge=0)

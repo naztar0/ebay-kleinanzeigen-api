@@ -62,24 +62,31 @@ def benchmark_listings(
     query: str,
     page_count: int,
     iterations: int,
+    sort_by: str | None = None,
+    start_page: int = 1,
 ) -> BenchmarkResult:
     url = f"{base_url}/v1/listings"
-    times = [
-        run_request(
-            client,
-            "GET",
-            url,
-            params={
-                "query": query,
-                "page_count": page_count,
-                "min_price": 10,
-                "max_price": 300,
-            },
-        )
-        for _ in range(iterations)
-    ]
+    params = {
+        "query": query,
+        "page_count": page_count,
+        "min_price": 10,
+        "max_price": 300,
+    }
+    if sort_by:
+        params["sort_by"] = sort_by
+    if start_page > 1:
+        params["start_page"] = start_page
+
+    times = [run_request(client, "GET", url, params=params) for _ in range(iterations)]
+
+    name_parts = [f"query='{query}'", f"pages={page_count}"]
+    if sort_by:
+        name_parts.append(f"sort='{sort_by}'")
+    if start_page > 1:
+        name_parts.append(f"start={start_page}")
+
     return BenchmarkResult(
-        name=f"/v1/listings (query='{query}', pages={page_count})",
+        name=f"/v1/listings ({', '.join(name_parts)})",
         iterations=iterations,
         elapsed_times=times,
     )
@@ -190,6 +197,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     }
 
     with httpx.Client() as client:
+        # Basic listings benchmark
         for page_count in args.page_counts:
             listing_result = benchmark_listings(
                 client,
@@ -200,6 +208,44 @@ def main(argv: Iterable[str] | None = None) -> int:
             )
             results.append(listing_result)
             listings_series.append((page_count, listing_result.average))
+
+        # Test with sort by price (if using page_count=3)
+        if 3 in args.page_counts:
+            results.append(
+                benchmark_listings(
+                    client,
+                    base_url=args.base_url,
+                    query=args.query,
+                    page_count=3,
+                    iterations=args.iterations,
+                    sort_by="price",
+                )
+            )
+
+        # Test with start_page parameter (if using page_count=2)
+        if 2 in args.page_counts or 3 in args.page_counts:
+            page_cnt = 2 if 2 in args.page_counts else 3
+            results.append(
+                benchmark_listings(
+                    client,
+                    base_url=args.base_url,
+                    query=args.query,
+                    page_count=page_cnt,
+                    iterations=args.iterations,
+                    start_page=3,
+                )
+            )
+
+        # Test early termination optimization with limited results query
+        results.append(
+            benchmark_listings(
+                client,
+                base_url=args.base_url,
+                query="acemagic",  # Limited results query
+                page_count=10,
+                iterations=args.iterations,
+            )
+        )
 
         results.append(
             benchmark_listing_detail(

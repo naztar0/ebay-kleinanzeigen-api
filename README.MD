@@ -8,13 +8,13 @@
   </p>
 
   <p align="center">
-    <b>🚀 Looking for a ready-to-use solution?</b>
+    <b>Looking for a ready-to-use solution?</b>
     <br />
     Try it at <a href="https://kleinanzeigen-agent.de/features/developer-api"><strong>kleinanzeigen-agent.de »</strong></a>
     <br />
-    ✓ Automated Search Agents
+    Automated Search Agents
     <br />
-    ✓ Search & Detail API
+    Search & Detail API
     <br />
     <a href="https://github.com/DanielWTE/ebay-kleinanzeigen-api/issues">Report Bug</a>
     ·
@@ -236,21 +236,21 @@ The output is a table summarising the average, min and max response times across
 
 ### Sample Benchmark Results
 
-| Endpoint | Parameters | Avg (s) | Min (s) | Max (s) |
-|----------|------------|--------:|--------:|--------:|
-| `/v1/listings` | `query=pc`, `pages=1` | 0.282 | 0.263 | 0.307 |
-| `/v1/listings` | `query=pc`, `pages=3` | 0.796 | 0.739 | 0.899 |
-| `/v1/listings` | `query=pc`, `pages=5` | 1.439 | 1.327 | 1.588 |
-| `/v1/listings/{id}` | `id=3198895972` | 0.428 | 0.366 | 0.465 |
-| `/v1/listings-detailed` | `pages=1`, `concurrency=5` | 2.530 | 2.369 | 2.826 |
-| `/v1/listings-detailed` | `pages=1`, `concurrency=10` | 2.017 | 1.997 | 2.033 |
-| `/v1/listings-detailed` | `pages=1`, `concurrency=15` | 1.957 | 1.876 | 2.060 |
-| `/v1/listings-detailed` | `pages=3`, `concurrency=5` | 6.837 | 6.373 | 7.459 |
-| `/v1/listings-detailed` | `pages=3`, `concurrency=10` | 5.874 | 5.665 | 6.264 |
-| `/v1/listings-detailed` | `pages=3`, `concurrency=15` | 5.662 | 5.605 | 5.739 |
-| `/v1/listings-detailed` | `pages=5`, `concurrency=5` | 11.546 | 11.420 | 11.652 |
-| `/v1/listings-detailed` | `pages=5`, `concurrency=10` | 9.428 | 9.219 | 9.605 |
-| `/v1/listings-detailed` | `pages=5`, `concurrency=15` | 9.414 | 9.204 | 9.524 |
+| Endpoint | Parameters | Avg (s) | Min (s) | Max (s) | Notes |
+|----------|------------|--------:|--------:|--------:|-------|
+| `/v1/listings` | `query=pc`, `pages=1` | 0.899 | 0.736 | 1.030 | Basic search |
+| `/v1/listings` | `query=pc`, `pages=3` | 1.985 | 1.661 | 2.239 | Multi-page |
+| `/v1/listings` | `query=pc`, `pages=5` | 3.712 | 2.814 | 5.223 | Multi-page |
+| `/v1/listings` | `query=pc`, `pages=3`, `sort=price` | 1.543 | 1.275 | 1.698 | With sorting |
+| `/v1/listings` | `query=pc`, `pages=3`, `start=3` | 1.595 | 1.521 | 1.644 | Start from page 3 |
+| `/v1/listings` | `query=acemagic`, `pages=10` | 1.125 | 0.792 | 1.305 | Early termination (2 pages exist) |
+| `/v1/listings/{id}` | `id=3198895972` | 0.894 | 0.817 | 0.959 | Single listing |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=5` | 6.571 | 6.106 | 7.212 | With details |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=5` | 14.833 | 13.521 | 16.801 | With details |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=5` | 20.502 | 19.836 | 21.284 | With details |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=10` | 3.833 | 3.453 | 4.034 | Higher concurrency |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=10` | 11.189 | 11.038 | 11.460 | Higher concurrency |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=10` | 16.519 | 15.946 | 16.987 | Higher concurrency |
 
 ![Benchmark chart](assets/benchmarks.png)
 

@@ -10,7 +10,7 @@ from bs4.element import Tag
 from loguru import logger
 
 from ..core.config import get_settings
-from ..models.listings import ListingDetail, ListingSummary
+from ..models.listings import ListingDetail, ListingSummary, PaginationMetadata
 from ..models.metrics import PageMetric, PerformanceMetrics
 from .http_client import HttpClientFactory, fetch_json
 from .parsers.detail_parser import (
@@ -106,22 +106,60 @@ class KleinanzeigenScraperService:
         radius: int | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
+        sort_by: str | None = None,
         page_count: int = 1,
-    ) -> tuple[list[ListingSummary], PerformanceMetrics]:
+        start_page: int = 1,
+    ) -> tuple[list[ListingSummary], PerformanceMetrics, PaginationMetadata]:
         page_metrics: List[PageMetric] = []
         summaries: List[ListingSummary] = []
+        seen_ad_ids: set[str] = set()
+        duplicates_removed = 0
+        total_available_results: int | None = None
 
-        for page_number in range(1, page_count + 1):
-            page_metric = await self._fetch_listings_page(
+        end_page = start_page + page_count - 1
+        last_page_reached = False
+
+        for page_number in range(start_page, end_page + 1):
+            # Stop if we already know there are no more pages
+            if last_page_reached:
+                logger.debug(
+                    f"Skipping page {page_number} - last available page already reached"
+                )
+                break
+
+            page_metric, page_total_results = await self._fetch_listings_page(
                 page_number=page_number,
                 query=query,
                 location=location,
                 radius=radius,
                 min_price=min_price,
                 max_price=max_price,
+                sort_by=sort_by,
                 summaries=summaries,
+                seen_ad_ids=seen_ad_ids,
             )
             page_metrics.append(page_metric)
+
+            # Store total results from first successful page
+            if page_total_results is not None and total_available_results is None:
+                total_available_results = page_total_results
+
+            # Count duplicates
+            if page_metric.duplicates_found:
+                duplicates_removed += page_metric.duplicates_found
+
+            # Check if we hit a redirect (302) - means no more pages available
+            # The error message will contain "Redirect response '302"
+            if (
+                not page_metric.success
+                and page_metric.error
+                and "302" in page_metric.error
+            ):
+                last_page_reached = True
+                logger.info(
+                    f"Reached last available page at page {page_number - 1}. "
+                    f"Stopping pagination early."
+                )
 
         metrics = PerformanceMetrics(
             pages_requested=page_count,
@@ -147,7 +185,18 @@ class KleinanzeigenScraperService:
             ),
             page_details=page_metrics,
         )
-        return summaries, metrics
+
+        pagination_metadata = PaginationMetadata(
+            pages_requested=page_count,
+            pages_fetched=len([m for m in page_metrics if m.success]),
+            start_page=start_page,
+            end_page=end_page,
+            total_available_results=total_available_results,
+            results_per_page=25,
+            duplicates_removed=duplicates_removed,
+        )
+
+        return summaries, metrics, pagination_metadata
 
     @staticmethod
     def _matches_price_filters(
@@ -170,16 +219,20 @@ class KleinanzeigenScraperService:
         radius: int | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
+        sort_by: str | None = None,
         page_count: int = 1,
+        start_page: int = 1,
         max_concurrent_details: int = 10,
     ) -> List[Dict[str, Any]]:
-        listings, _ = await self.fetch_listings(
+        listings, _, _ = await self.fetch_listings(
             query=query,
             location=location,
             radius=radius,
             min_price=min_price,
             max_price=max_price,
+            sort_by=sort_by,
             page_count=page_count,
+            start_page=start_page,
         )
 
         semaphore = asyncio.Semaphore(max_concurrent_details)
@@ -218,8 +271,10 @@ class KleinanzeigenScraperService:
         radius: int | None,
         min_price: int | None,
         max_price: int | None,
+        sort_by: str | None,
         summaries: List[ListingSummary],
-    ) -> PageMetric:
+        seen_ad_ids: set[str],
+    ) -> tuple[PageMetric, int | None]:
         import time
 
         start_time = time.perf_counter()
@@ -231,6 +286,7 @@ class KleinanzeigenScraperService:
                 radius=radius,
                 min_price=min_price,
                 max_price=max_price,
+                sort_by=sort_by,
             )
             logger.debug(f"Fetching listing page {page_number} via {url}")
             headers = {"User-Agent": self._settings.http_user_agent}
@@ -238,25 +294,41 @@ class KleinanzeigenScraperService:
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
+
+            # Extract total available results from breadcrumb
+            total_results = self._extract_total_results(soup)
+
             articles = soup.select("article.aditem[data-adid]")
             count = 0
+            duplicates_found = 0
+
             for article in articles:
                 if summary := self._parse_listing_summary(article):
+                    # Check for duplicates
+                    if summary.ad_id in seen_ad_ids:
+                        duplicates_found += 1
+                        logger.debug(f"Duplicate ad_id found: {summary.ad_id}")
+                        continue
+
+                    seen_ad_ids.add(summary.ad_id)
                     summaries.append(summary)
                     count += 1
 
             duration = time.perf_counter() - start_time
-            return PageMetric(
+            metric = PageMetric(
                 page_number=page_number,
                 time_taken=duration,
                 success=True,
                 retry_count=0,
                 results_count=count,
+                duplicates_found=duplicates_found,
             )
+
+            return metric, total_results
         except httpx.HTTPError as exc:
             duration = time.perf_counter() - start_time
             logger.warning(f"Failed to fetch page {page_number}: {exc}")
-            return PageMetric(
+            metric = PageMetric(
                 page_number=page_number,
                 time_taken=duration,
                 success=False,
@@ -264,6 +336,7 @@ class KleinanzeigenScraperService:
                 results_count=0,
                 error=str(exc),
             )
+            return metric, None
 
     def _build_search_url(
         self,
@@ -274,6 +347,7 @@ class KleinanzeigenScraperService:
         radius: int | None,
         min_price: int | None,
         max_price: int | None,
+        sort_by: str | None = None,
     ) -> str:
         from urllib.parse import urlencode
 
@@ -283,37 +357,72 @@ class KleinanzeigenScraperService:
         if radius:
             params["radius"] = radius
 
-        price_path = ""
-        if min_price is not None or max_price is not None:
-            min_segment = str(min_price) if min_price is not None else ""
-            max_segment = str(max_price) if max_price is not None else ""
-            price_path = f"preis:{min_segment}:{max_segment}"
+        # Build URL path following Kleinanzeigen pattern:
+        # s-{first_modifier}/{other_modifiers}/{query}/k0
+        # Examples:
+        # - s-preis:10:350/mini-pc/k0
+        # - s-preis:10:350/seite:2/mini-pc/k0
+        # - s-sortierung:preis/preis:10:350/mini-pc/k0
 
-        # Build path: /s-{price_path}/{query}/k0 or /s-{query}/k0
+        first_modifier = None
         path_segments = []
 
-        if price_path:
-            path_segments.append(f"s-{price_path}")
-        else:
-            path_segments.append("s")
+        # Determine the first modifier (goes after 's-')
+        # Priority: sort > price (if no sort)
+        if sort_by:
+            if sort_by.lower() in ["price", "lowest", "preis"]:
+                first_modifier = "sortierung:preis"
+            elif sort_by.lower() in ["highest", "teuerste"]:
+                first_modifier = "sortierung:teuerste"
 
+        # If no sort, price becomes first modifier
+        if not first_modifier and (min_price is not None or max_price is not None):
+            min_segment = str(min_price) if min_price is not None else ""
+            max_segment = str(max_price) if max_price is not None else ""
+            first_modifier = f"preis:{min_segment}:{max_segment}"
+
+        # Build the base path with 's' and first modifier
+        # If no modifiers but we have a query, query becomes the first modifier
         if query:
             slugified_query = self._slugify(query)
-            # If we don't have price, combine with s- prefix
-            if not price_path:
-                path_segments[-1] = f"s-{slugified_query}"
-            else:
-                path_segments.append(slugified_query)
+        else:
+            slugified_query = None
 
+        if first_modifier:
+            base_path = f"s-{first_modifier}"
+        elif slugified_query:
+            # If no other modifiers, query goes directly after s-
+            base_path = f"s-{slugified_query}"
+            slugified_query = None  # Don't add it again later
+        else:
+            base_path = "s"
+
+        # Add remaining modifiers as separate segments
+        # If sort was first, add price as second segment
+        if sort_by and (min_price is not None or max_price is not None):
+            min_segment = str(min_price) if min_price is not None else ""
+            max_segment = str(max_price) if max_price is not None else ""
+            path_segments.append(f"preis:{min_segment}:{max_segment}")
+
+        # Add page number (seite:X)
+        if page_number > 1:
+            path_segments.append(f"seite:{page_number}")
+
+        # Add query if it wasn't already added to base_path
+        if slugified_query:
+            path_segments.append(slugified_query)
+
+        # Add k0 suffix
         path_segments.append("k0")
 
-        path_segment = "/".join(path_segments)
-
-        if page_number > 1:
-            params["page"] = page_number
+        # Construct final path
+        if path_segments:
+            full_path = f"{base_path}/{'/'.join(path_segments)}"
+        else:
+            full_path = f"{base_path}/k0"
 
         query_string = urlencode(params)
-        base_url = f"{self.BASE_URL}/{path_segment}"
+        base_url = f"{self.BASE_URL}/{full_path}"
         return f"{base_url}?{query_string}" if query_string else base_url
 
     @staticmethod
@@ -322,6 +431,32 @@ class KleinanzeigenScraperService:
         value = re.sub(r"\s+", "-", value)
         value = re.sub(r"[^a-z0-9-]", "", value)
         return value or "k0"
+
+    @staticmethod
+    def _extract_total_results(soup: BeautifulSoup) -> int | None:
+        """Extract total results count from breadcrumb.
+
+        Example: <span class="breadcrump-summary">1 - 25 von 3.006 Ergebnissen für „mini pc" in Deutschland</span>
+        Extracts: 3006
+        """
+        breadcrumb = soup.select_one(".breadcrump-summary")
+        if not breadcrumb:
+            return None
+
+        text = breadcrumb.get_text(strip=True)
+        # Pattern: "X - Y von Z.ZZZ Ergebnissen" or "X - Y von Z Ergebnissen"
+        # Need to handle German number format with dots as thousands separator
+        match = re.search(r"von\s+([\d.]+)\s+Ergebnis", text)
+        if not match:
+            return None
+
+        # Remove dots (thousands separator) and convert to int
+        total_str = match.group(1).replace(".", "")
+        try:
+            return int(total_str)
+        except ValueError:
+            logger.warning(f"Failed to parse total results from: {text}")
+            return None
 
     def _parse_listing_summary(self, article: Tag) -> ListingSummary | None:
         ad_id = article.get("data-adid")

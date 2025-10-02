@@ -11,6 +11,7 @@ class PageMetric(BaseModel):
     success: bool
     retry_count: int = Field(..., ge=0)
     results_count: int = Field(..., ge=0)
+    duplicates_found: int = Field(default=0, ge=0)
     error: Optional[str] = None
     error_category: Optional[str] = None
     warning_count: Optional[int] = Field(None, ge=0)
