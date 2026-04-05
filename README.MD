@@ -8,13 +8,13 @@
   </p>
 
   <p align="center">
-    <b>Looking for a ready-to-use solution?</b>
+    <b>🚀 Looking for a ready-to-use solution?</b>
     <br />
     Try it at <a href="https://kleinanzeigen-agent.de/features/developer-api"><strong>kleinanzeigen-agent.de »</strong></a>
     <br />
-    Automated Search Agents
+    ✓ Automated Search Agents
     <br />
-    Search & Detail API
+    ✓ Search & Detail API
     <br />
     <a href="https://github.com/DanielWTE/ebay-kleinanzeigen-api/issues">Report Bug</a>
     ·
@@ -23,16 +23,6 @@
 </div>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Project Structure
-
-This project now follows a modern `src/` based layout:
-
-- `src/app/core/`: Configuration and logging setup
-- `src/app/api/routes/`: FastAPI routers
-- `src/app/models/`: Pydantic request/response models
-- `src/app/services/`: Scraper and HTTP utilities
-- `tests/`: Test suite (to be updated)
 
 ## Getting Started
 
@@ -45,15 +35,6 @@ Visit [kleinanzeigen-agent.de](https://kleinanzeigen-agent.de/features/developer
 - Python 3.12 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended)
 
-### Installation with uv (recommended)
-
-```sh
-uv sync
-uv run uvicorn src.app.main:app --reload
-```
-
-### Installation with pip
-
 ### Installation
 
 1. Clone the repository
@@ -63,41 +44,23 @@ git clone https://github.com/DanielWTE/ebay-kleinanzeigen-api.git
 cd ebay-kleinanzeigen-api
 ```
 
-2. Install dependencies
-
-```sh
-pip install -r requirements.txt
-```
-
-3. Start the API
-
-```sh
-uvicorn src.app.main:app --reload
-```
-
-The API will be available at `http://localhost:8000`
-
-### Installation using UV
-
-#### Prerequisites
-
-- uv package manager
-
-#### Installation of dependencies
+1. Install dependencies
 
 ```sh
 uv sync
 ```
 
-#### Start the API
+1. Start the API
 
 ```sh
+# Development
+uv run uvicorn src.app.main:app --reload
+
 # Windows
 uv run uvicorn src.app.main:app
-
-# macOS/Linux (optional auto-reload for development)
-uv run uvicorn src.app.main:app --reload
 ```
+
+The API will be available at `http://localhost:8000`
 
 ### Installation using Docker
 
@@ -107,7 +70,7 @@ uv run uvicorn src.app.main:app --reload
 docker build -t ebay-kleinanzeigen-api .
 ```
 
-2. Run the Docker container
+1. Run the Docker container
 
 ```sh
 docker run -p 8000:8000 ebay-kleinanzeigen-api
@@ -121,145 +84,130 @@ The API will be available at `http://localhost:8000`
 
 **Endpoint:** `GET /v1/listings`
 
-**Description:** Retrieves listings as summary records.
+**Description:** Retrieves listings as summary records with filtering and pagination.
+
+##### Query Parameters
+
+- **`query`** *(string, optional)*: The search term (e.g., `"fahrrad"`).
+- **`location`** *(string, optional)*: Location or city name (e.g., `"Berlin"`).
+- **`radius`** *(integer, optional)*: Search radius in km (1–100).
+- **`min_price`** *(integer, optional)*: Minimum price in EUR.
+- **`max_price`** *(integer, optional)*: Maximum price in EUR.
+- **`sort_by`** *(string, optional)*: `"lowest"` / `"price"` for ascending, `"highest"` for descending, or omit for newest first.
+- **`page_count`** *(integer, optional)*: Pages to fetch (1–10, default `1`). Pages are fetched in parallel.
+- **`start_page`** *(integer, optional)*: Starting page number (1–200, default `1`).
+
+##### Example Request
+
+```http
+GET /v1/listings?query=fahrrad&location=Berlin&radius=20&min_price=50&page_count=3
+```
 
 #### 2. Fetch Listing Details
 
 **Endpoint:** `GET /v1/listings/{listing_id}`
 
-**Description:** Retrieves a single listing with full detail.
-
-#### 3. Fetch Listings with Details
-
-**Endpoint:** `GET /v1/listings-detailed`
-
-**Description:** Retrieves listings and their detailed information in a single request.
-
-##### Query Parameters
-
-Same as `/v1/listings` plus `max_concurrent_details` (default 10, max 20).
+**Description:** Retrieves full details for a single listing (title, description, images, seller, views, etc.).
 
 ##### Example Request
 
 ```http
-GET /inserate-detailed?query=laptop&page_count=2&max_concurrent_details=10
+GET /v1/listings/1641118170
 ```
 
-### Production Deployment
+#### 3. Fetch Listings with Details (Combined)
 
-#### Running with Multiple Workers
+**Endpoint:** `GET /v1/listings-detailed`
 
-For production environments, it is recommended to run the API with multiple worker processes to fully utilize CPU cores and handle more concurrent requests.
+**Description:** Retrieves listing summaries and their full detail pages in a single request. Detail pages are fetched concurrently.
 
-You can specify the number of workers using the `--workers` flag with `uvicorn`. A good starting point is `(2 * number_of_cpu_cores) + 1`.
+##### Query Parameters
 
-```sh
-# Example: Start with 4 workers
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+Same as `/v1/listings`, plus:
+
+- **`max_concurrent_details`** *(integer, optional)*: Max concurrent detail fetches (1–20, default `10`).
+
+##### Example Request
+
+```http
+GET /v1/listings-detailed?query=laptop&page_count=2&max_concurrent_details=10
 ```
-
-**Note:** When running with multiple workers, each worker will have its own `OptimizedPlaywrightManager` instance. Ensure your server has enough RAM to accommodate multiple browser instances.
 
 ### Documentation
 
 #### API Response Format
 
-All API endpoints return responses in the following JSON format:
-
-##### API Response Format
+All responses follow a consistent envelope:
 
 ```json
 {
   "success": true,
-  "time_taken": 1.23,
-  "unique_results": 100,
-  "data": [...],
-  "performance_metrics": {
-    "pages_requested": 5,
-    "pages_successful": 5,
-    "success_rate": 100.0,
-    "average_page_time": 2.45
-  }
+  "time_taken": 0.31,
+  "data": { ... }
 }
 ```
 
-##### Combined Endpoint Response Format
+Error responses always use:
 
 ```json
 {
-  "success": true,
-  "time_taken": 3.45,
-  "unique_results": 25,
-  "data": [
-    {
-      "adid": "123456",
-      "title": "Example Item",
-      "price": "100",
-      "details": {
-        "id": "123456",
-        "description": "Full description...",
-        "seller": {...},
-        "location": {...}
-      }
-    }
-  ],
-  "performance_metrics": {
-    "listings_found": 25,
-    "details_fetched": 25,
-    "success_rate": 100.0
-  }
+  "success": false,
+  "error": "Listing not found"
 }
 ```
 
-## Performance Features
+See [`docs/API_USAGE.md`](docs/API_USAGE.md) for full response schemas, Python examples, configuration reference, and deployment tips.
 
-## Performance Benchmarks
+## 📊 Performance Benchmarks
 
-You can run repeatable benchmarks locally using the helper script in `scripts/benchmark.py`. Make sure the API server is already running, then execute:
+Benchmarks run locally with **3 iterations per case**. The first request is a cold fetch from Kleinanzeigen; subsequent identical requests within 60 seconds hit the in-memory cache. The table below shows all three iterations combined — `min` is typically a cache hit, `max` is a realistic cold-start figure.
 
-```bash
-uv run python scripts/benchmark.py \
-  --iterations 3 \
-  --page-counts 1,3,5 \
-  --max-concurrency 5,10,15 \
-  --query pc \
+Run the benchmark yourself after starting the server:
+
+```sh
+uv run --group dev python scripts/benchmark.py \
+  --iterations 3 --page-counts 1,3,5 \
+  --max-concurrency 5,10 --query pc \
   --chart-output assets/benchmarks.png
 ```
 
-This script hits
+| Endpoint | Parameters | Avg (s) | Min (s) | Max (s) |
+|---|---|---:|---:|---:|
+| `/v1/listings` | `pages=1` | 0.315 | 0.199 | 0.448 |
+| `/v1/listings` | `pages=3` | 0.335 | 0.275 | 0.405 |
+| `/v1/listings` | `pages=5` | 0.629 | 0.539 | 0.716 |
+| `/v1/listings` | `pages=3`, `sort=price` | 0.335 | 0.298 | 0.367 |
+| `/v1/listings` | `pages=3`, `start=3` | 0.388 | 0.299 | 0.436 |
+| `/v1/listings` | `query=acemagic`, `pages=10` | 0.393 | 0.353 | 0.461 |
+| `/v1/listings/{id}` | single listing | 0.342 | 0.326 | 0.368 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=5` | 2.838 | 2.765 | 2.898 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=5` | 7.018 | 6.814 | 7.421 |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=5` | 11.370 | 11.112 | 11.704 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=10` | 1.941 | 1.833 | 2.022 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=10` | 5.161 | 4.871 | 5.348 |
 
-- `GET /v1/listings` for each requested `page_count`
-- `GET /v1/listings/{listing_id}` using listing `3198895972`
-- `GET /v1/listings-detailed` for each `page_count` combined with the `max_concurrency` values
-
-The output is a table summarising the average, min and max response times across the chosen iterations and saves a chart overlaying the results to `assets/benchmarks.png`. Use `--output json` if you prefer JSON payloads for automation.
-
-### Sample Benchmark Results
-
-| Endpoint | Parameters | Avg (s) | Min (s) | Max (s) | Notes |
-|----------|------------|--------:|--------:|--------:|-------|
-| `/v1/listings` | `query=pc`, `pages=1` | 0.899 | 0.736 | 1.030 | Basic search |
-| `/v1/listings` | `query=pc`, `pages=3` | 1.985 | 1.661 | 2.239 | Multi-page |
-| `/v1/listings` | `query=pc`, `pages=5` | 3.712 | 2.814 | 5.223 | Multi-page |
-| `/v1/listings` | `query=pc`, `pages=3`, `sort=price` | 1.543 | 1.275 | 1.698 | With sorting |
-| `/v1/listings` | `query=pc`, `pages=3`, `start=3` | 1.595 | 1.521 | 1.644 | Start from page 3 |
-| `/v1/listings` | `query=acemagic`, `pages=10` | 1.125 | 0.792 | 1.305 | Early termination (2 pages exist) |
-| `/v1/listings/{id}` | `id=3198895972` | 0.894 | 0.817 | 0.959 | Single listing |
-| `/v1/listings-detailed` | `pages=1`, `concurrency=5` | 6.571 | 6.106 | 7.212 | With details |
-| `/v1/listings-detailed` | `pages=3`, `concurrency=5` | 14.833 | 13.521 | 16.801 | With details |
-| `/v1/listings-detailed` | `pages=5`, `concurrency=5` | 20.502 | 19.836 | 21.284 | With details |
-| `/v1/listings-detailed` | `pages=1`, `concurrency=10` | 3.833 | 3.453 | 4.034 | Higher concurrency |
-| `/v1/listings-detailed` | `pages=3`, `concurrency=10` | 11.189 | 11.038 | 11.460 | Higher concurrency |
-| `/v1/listings-detailed` | `pages=5`, `concurrency=10` | 16.519 | 15.946 | 16.987 | Higher concurrency |
+> `query=pc`, `min_price=10`, `max_price=300` used for all listings benchmarks unless stated otherwise.  
+> `acemagic` benchmark demonstrates early-termination: requesting 10 pages but only ~2 exist.
 
 ![Benchmark chart](assets/benchmarks.png)
 
-### Technical Features
+### 🚀 Technical Features
 
-- **uvloop Integration**: High-performance asyncio event loop
-- **Context Pooling**: Efficient browser resource reuse
-- **Memory Optimization**: Automatic garbage collection and efficient processing
-- **Intelligent Concurrency**: Optimal concurrent processing with resource control
+- **Parallel Page Fetching**: Multiple pages fetched concurrently — `pages=3` takes the same wall-clock time as `pages=1`
+- **Shared Connection Pool**: Single `httpx.AsyncClient` reused across all requests, eliminating per-request TLS overhead
+- **In-Memory Response Cache**: Identical queries served from cache for 60 s (listings) or 300 s (single detail)
+- **Early Termination**: Stops fetching as soon as Kleinanzeigen signals no further pages (redirect detection)
+- **Automatic Deduplication**: Duplicate ad IDs removed when combining results from multiple pages
+- **uvloop**: High-performance asyncio event loop used automatically on Linux/macOS
+
+### 🔧 Production Ready
+
+- **Consistent Error Responses**: All errors return `{"success": false, "error": "..."}` regardless of failure type
+- **Rate Limiting**: Optional per-IP rate limiting via `APP_RATE_LIMIT_ENABLED=true`
+- **CORS**: Configurable via `APP_CORS_ALLOW_ORIGINS`
+- **Request Tracing**: `X-Request-ID` header on every response for log correlation
+- **Health Check**: `GET /health` endpoint for Docker and load-balancer probes
+- **Docker Optimized**: Fast container builds with uv package manager
 
 API documentation is available at `http://localhost:8000/docs` when running locally.
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 from loguru import logger
@@ -8,29 +8,42 @@ from loguru import logger
 from ..core.config import get_settings
 
 
-class HttpClientFactory:
-    """Factory for configured HTTPX async clients."""
+def create_shared_client() -> httpx.AsyncClient:
+    """Create the application-scoped HTTPX async client.
 
-    @staticmethod
-    def create_async_client() -> httpx.AsyncClient:
-        settings = get_settings()
-        timeout = httpx.Timeout(settings.http_timeout)
-        transport = httpx.AsyncHTTPTransport(retries=settings.http_max_retries)
-        return httpx.AsyncClient(timeout=timeout, transport=transport)
+    Uses connection pooling, explicit redirect handling (disabled so 302s
+    are detected as pagination end), and reads all tuning from Settings.
+    """
+    settings = get_settings()
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(settings.http_timeout),
+        transport=httpx.AsyncHTTPTransport(retries=settings.http_max_retries),
+        follow_redirects=False,
+        limits=httpx.Limits(
+            max_connections=settings.http_max_connections,
+            max_keepalive_connections=settings.http_max_keepalive_connections,
+            keepalive_expiry=30.0,
+        ),
+        headers={"User-Agent": settings.http_user_agent},
+    )
 
 
 async def fetch_json(
-    client: httpx.AsyncClient, url: str, *, params: Dict[str, Any] | None = None
-) -> Dict[str, Any]:
-    """Fetch JSON content from the given URL with error handling."""
-
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """GET JSON from *url*, raising on HTTP or network errors."""
     try:
         response = await client.get(url, params=params)
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as exc:
-        logger.warning(f"HTTP error {exc.response.status_code} for {exc.request.url}")
+        logger.warning(
+            "HTTP error %d for %s", exc.response.status_code, exc.request.url
+        )
         raise
     except httpx.HTTPError as exc:
-        logger.error(f"HTTP client error for {url}: {exc}")
+        logger.error("HTTP client error for %s: %s", url, exc)
         raise

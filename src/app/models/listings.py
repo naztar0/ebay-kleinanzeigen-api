@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 from pydantic import BaseModel, Field, field_validator
+
+from .metrics import PerformanceMetrics
 
 
 class Price(BaseModel):
@@ -12,44 +12,44 @@ class Price(BaseModel):
 
 
 class Location(BaseModel):
-    zip: str = Field(..., min_length=1)
-    city: str = Field(..., min_length=1)
-    state: Optional[str] = None
+    zip: str = Field(default="")
+    city: str = Field(default="")
+    state: str | None = None
 
 
 class Seller(BaseModel):
-    name: Optional[str] = None
-    since: Optional[str] = None
+    name: str | None = None
+    since: str | None = None
     type: str = Field(default="private")
-    badges: List[str] = Field(default_factory=list)
+    badges: list[str] = Field(default_factory=list)
 
 
 class ListingDetail(BaseModel):
     id: str = Field(..., min_length=1)
-    categories: List[str] = Field(default_factory=list)
-    title: str = Field(..., min_length=1)
+    categories: list[str] = Field(default_factory=list)
+    title: str = Field(default="")
     status: str = Field(default="active")
     price: Price
-    delivery: Optional[str] = None
-    delivery_cost: Optional[str] = None
+    delivery: str | None = None
+    delivery_cost: str | None = None
     location: Location
-    views: Optional[int] = Field(default=None, ge=0)
-    description: Optional[str] = None
-    images: List[str] = Field(default_factory=list)
-    details: Dict[str, str] = Field(default_factory=dict)
-    features: List[str] = Field(default_factory=list)
+    views: int | None = Field(default=None, ge=0)
+    description: str | None = None
+    images: list[str] = Field(default_factory=list)
+    details: dict[str, str] = Field(default_factory=dict)
+    features: list[str] = Field(default_factory=list)
     seller: Seller
-    extra_info: Dict[str, Optional[str]] = Field(default_factory=dict)
+    extra_info: dict[str, str | None] = Field(default_factory=dict)
 
 
 class ListingSummary(BaseModel):
     ad_id: str = Field(..., alias="adid")
     url: str
     title: str
-    price: Optional[float] = Field(default=None, ge=0)
-    currency: Optional[str] = None
+    price: float | None = Field(default=None, ge=0)
+    currency: str | None = None
     negotiable: bool = Field(default=False)
-    description_snippet: Optional[str] = Field(default=None, alias="description")
+    description_snippet: str | None = Field(default=None, alias="description")
 
     model_config = {
         "populate_by_name": True,
@@ -58,13 +58,20 @@ class ListingSummary(BaseModel):
 
     @field_validator("price", mode="before")
     @classmethod
-    def _coerce_price(cls, value):
+    def _coerce_price(cls, value: object) -> float | None:
         if value is None:
             return None
         try:
-            return float(value)
+            return float(value)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             return None
+
+
+class DetailedListingItem(BaseModel):
+    """A listing summary paired with its full detail, returned by /listings-detailed."""
+
+    summary: ListingSummary
+    detail: ListingDetail
 
 
 class PaginationMetadata(BaseModel):
@@ -76,7 +83,7 @@ class PaginationMetadata(BaseModel):
     )
     start_page: int = Field(default=1, ge=1, description="Starting page number")
     end_page: int = Field(..., ge=1, description="Ending page number")
-    total_available_results: Optional[int] = Field(
+    total_available_results: int | None = Field(
         default=None,
         ge=0,
         description="Total results available from search (if detected)",
@@ -89,7 +96,10 @@ class PaginationMetadata(BaseModel):
 
 class ListingsResponse(BaseModel):
     success: bool = True
-    results: List[ListingSummary] = Field(default_factory=list)
+    results: list[ListingSummary] = Field(default_factory=list)
     total_results: int = Field(..., ge=0)
-    pagination: Optional[PaginationMetadata] = None
+    pagination: PaginationMetadata | None = None
+    metrics: PerformanceMetrics | None = Field(
+        default=None, description="Per-page fetch timing metrics"
+    )
     time_taken: float = Field(..., ge=0)

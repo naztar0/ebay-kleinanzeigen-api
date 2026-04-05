@@ -1,4 +1,4 @@
-# to use it please install matplotlib
+# to use it please install matplotlib (uv run --group dev python scripts/benchmark.py)
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,6 @@ import httpx
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_QUERY = "pc"
-DETAIL_LISTING_ID = "3198895972"
 
 
 @dataclass
@@ -161,6 +160,22 @@ def parse_concurrency_values(value: str) -> List[int]:
         ) from exc
 
 
+def resolve_listing_id(client: httpx.Client, base_url: str, query: str) -> str:
+    """Fetch one page of listings and return the first ad_id for detail benchmarks."""
+    resp = client.get(
+        f"{base_url}/v1/listings",
+        params={"query": query, "page_count": 1},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    results = resp.json().get("data", {}).get("results", [])
+    if not results:
+        raise RuntimeError(
+            f"No listings returned for query '{query}'; cannot run detail benchmark."
+        )
+    return results[0]["adid"]
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Benchmark Kleinanzeigen API endpoints"
@@ -197,6 +212,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     }
 
     with httpx.Client() as client:
+        # Resolve a live listing ID for the detail benchmark
+        print(f"Resolving live listing ID for query='{args.query}'...")
+        detail_listing_id = resolve_listing_id(client, args.base_url, args.query)
+        print(f"Using listing ID: {detail_listing_id}")
+
         # Basic listings benchmark
         for page_count in args.page_counts:
             listing_result = benchmark_listings(
@@ -251,7 +271,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             benchmark_listing_detail(
                 client,
                 base_url=args.base_url,
-                listing_id=DETAIL_LISTING_ID,
+                listing_id=detail_listing_id,
                 iterations=args.iterations,
             )
         )

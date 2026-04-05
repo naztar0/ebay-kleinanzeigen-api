@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -11,11 +10,10 @@ def setup_logging(
     *,
     console_level: str = "INFO",
     file_level: str = "DEBUG",
-    app_name: str = "app",
-    logs_dir: Optional[Path] = None,
+    app_name: str = "kleinanzeigen-api",
+    logs_dir: Path | None = None,
 ) -> None:
-    """Configure Loguru sinks for console and file logging."""
-
+    """Configure Loguru sinks for console and rotating file logging."""
     logger.remove()
 
     logger.add(
@@ -36,12 +34,12 @@ def setup_logging(
     logger.add(
         logs_directory / f"{app_name}_{{time:YYYYMMDD}}.log",
         level=file_level,
-        rotation="12:00",
+        rotation="100 MB",
         retention="10 days",
         compression="zip",
         format=(
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - "
-            "{message}"
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+            "{name}:{function}:{line} - {message}"
         ),
         enqueue=True,
         backtrace=True,

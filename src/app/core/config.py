@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,14 +16,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    api_version: str = Field(default="1.0.0", description="API version string")
-    docs_url: Optional[str] = Field(
+    api_version: str = Field(default="2.0.0", description="API version string")
+    docs_url: str | None = Field(
         default="/docs", description="OpenAPI documentation path"
     )
-    redoc_url: Optional[str] = Field(
+    redoc_url: str | None = Field(
         default="/redoc", description="ReDoc documentation path"
     )
 
+    # HTTP client
     http_timeout: float = Field(
         default=15.0, gt=0, description="Default HTTP client timeout (seconds)"
     )
@@ -38,7 +38,24 @@ class Settings(BaseSettings):
         ),
         description="Default User-Agent header for HTTP scraping",
     )
+    http_max_connections: int = Field(
+        default=50, ge=1, description="Max total HTTP connections in the shared pool"
+    )
+    http_max_keepalive_connections: int = Field(
+        default=20,
+        ge=1,
+        description="Max keepalive HTTP connections in the shared pool",
+    )
 
+    # Scraping
+    page_fetch_concurrency: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Max concurrent page fetches when scraping multiple pages",
+    )
+
+    # Logging
     logging_console_level: str = Field(
         default="INFO", description="Console log level for Loguru sinks"
     )
@@ -50,6 +67,7 @@ class Settings(BaseSettings):
         description="Application name used for log files",
     )
 
+    # Rate limiting
     rate_limit_enabled: bool = Field(
         default=False, description="Enable global rate limiting middleware"
     )
@@ -60,9 +78,23 @@ class Settings(BaseSettings):
         default=60, description="Rate limit window size in seconds"
     )
 
+    # CORS
+    cors_allow_origins: list[str] = Field(
+        default=["*"], description="Allowed CORS origins"
+    )
+
+    # Caching
+    cache_ttl_seconds: int = Field(
+        default=60, ge=0, description="Cache TTL in seconds for listing responses"
+    )
+    cache_ttl_detail_seconds: int = Field(
+        default=300,
+        ge=0,
+        description="Cache TTL in seconds for single-listing detail responses",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return a cached Settings instance."""
-
     return Settings()
