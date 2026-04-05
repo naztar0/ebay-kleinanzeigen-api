@@ -13,6 +13,7 @@ from bs4.element import Tag
 from loguru import logger
 
 from ..core.config import get_settings
+from ..exceptions import KleinanzeigenBannedError
 from ..models.listings import (
     DetailedListingItem,
     ListingDetail,
@@ -34,6 +35,21 @@ from .parsers.detail_parser import (
 _UMLAUT = str.maketrans(
     {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "Ä": "ae", "Ö": "oe", "Ü": "ue"}
 )
+
+# Two distinct German strings that both appear on every Kleinanzeigen IP-ban page.
+# Checking both avoids false positives from pages that mention one word in passing.
+_BAN_MARKER_1 = "IP-Bereich"
+_BAN_MARKER_2 = "gesperrt"
+
+
+def _is_ip_ban_page(html: str) -> bool:
+    """Return True if *html* is Kleinanzeigen's IP-range block page.
+
+    The block page is returned with either HTTP 200 or HTTP 403 depending on
+    the client and request path.  Checking the body is more reliable than
+    relying on the status code alone.
+    """
+    return _BAN_MARKER_1 in html and _BAN_MARKER_2 in html
 
 
 class KleinanzeigenScraperService:
@@ -77,6 +93,10 @@ class KleinanzeigenScraperService:
         logger.debug("Fetching listing detail from %s", url)
 
         response = await self._client.get(url)
+        if _is_ip_ban_page(response.text):
+            raise KleinanzeigenBannedError(
+                "IP range temporarily blocked by Kleinanzeigen"
+            )
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -192,6 +212,22 @@ class KleinanzeigenScraperService:
                 else:
                     seen_ad_ids.add(summary.ad_id)
                     summaries.append(summary)
+
+        # If every attempted page returned a ban response and we have no results,
+        # surface it as a hard error rather than silently returning empty results.
+        if (
+            not summaries
+            and page_metrics
+            and all(
+                m.error_category == "ip_banned" for m in page_metrics if not m.success
+            )
+            and not any(m.success for m in page_metrics)
+        ):
+            raise KleinanzeigenBannedError(
+                "IP range temporarily blocked by Kleinanzeigen. "
+                "All page fetches returned a block response. "
+                "The restriction is temporary — try again in a few hours."
+            )
 
         successful = [m for m in page_metrics if m.success]
         times = [m.time_taken for m in successful]
@@ -319,6 +355,26 @@ class KleinanzeigenScraperService:
                 )
                 return metric, [], True, None
 
+            # Detect IP ban before raise_for_status — the ban page can arrive as
+            # HTTP 200, 403, or other status codes depending on the request path.
+            if _is_ip_ban_page(response.text):
+                duration = time.perf_counter() - start
+                logger.error(
+                    "IP range temporarily blocked by Kleinanzeigen (page %d, HTTP %d)",
+                    page_number,
+                    response.status_code,
+                )
+                metric = PageMetric(
+                    page_number=page_number,
+                    time_taken=duration,
+                    success=False,
+                    retry_count=0,
+                    results_count=0,
+                    error="IP range temporarily blocked by Kleinanzeigen",
+                    error_category="ip_banned",
+                )
+                return metric, [], False, None
+
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
@@ -339,9 +395,14 @@ class KleinanzeigenScraperService:
             )
             return metric, page_summaries, False, total_results
 
-        except httpx.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
             duration = time.perf_counter() - start
-            logger.warning("Failed to fetch page %d: %s", page_number, exc)
+            logger.warning(
+                "HTTP %d on page %d: %s",
+                exc.response.status_code,
+                page_number,
+                exc,
+            )
             metric = PageMetric(
                 page_number=page_number,
                 time_taken=duration,
@@ -350,6 +411,20 @@ class KleinanzeigenScraperService:
                 results_count=0,
                 error=str(exc),
                 error_category="http_error",
+            )
+            return metric, [], False, None
+
+        except httpx.HTTPError as exc:
+            duration = time.perf_counter() - start
+            logger.warning("Network error on page %d: %s", page_number, exc)
+            metric = PageMetric(
+                page_number=page_number,
+                time_taken=duration,
+                success=False,
+                retry_count=0,
+                results_count=0,
+                error=str(exc),
+                error_category="network_error",
             )
             return metric, [], False, None
 

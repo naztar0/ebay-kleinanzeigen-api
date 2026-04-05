@@ -265,6 +265,23 @@ All errors — validation failures, network errors, expired listings — use the
 | `429` | Rate limit exceeded (when `APP_RATE_LIMIT_ENABLED=true`) |
 | `500` | Unhandled server error |
 | `502` | Downstream Kleinanzeigen request failed |
+| `503` | Kleinanzeigen has temporarily blocked the host IP range (`error_category: "ip_banned"`) |
+
+### IP block (503)
+
+When the server's IP is temporarily blocked by Kleinanzeigen, every request returns:
+
+```json
+{
+  "success": false,
+  "error": "IP range temporarily blocked by Kleinanzeigen. All page fetches returned a block response. The restriction is temporary — try again in a few hours.",
+  "error_category": "ip_banned"
+}
+```
+
+Detection is based on the HTML response body (Kleinanzeigen sometimes returns the block page with HTTP 200 *and* with HTTP 403, so checking the status code alone is not reliable). The API checks both — it will never silently return empty results when a block is active.
+
+The block is usually lifted within a few hours. See [Kleinanzeigen's own explanation](https://themen.kleinanzeigen.de/ip-eingeschraenkt/) for more detail.
 
 ---
 

@@ -168,12 +168,12 @@ def resolve_listing_id(client: httpx.Client, base_url: str, query: str) -> str:
         timeout=30.0,
     )
     resp.raise_for_status()
-    results = resp.json().get("data", {}).get("results", [])
-    if not results:
+    if results := resp.json().get("data", {}).get("results", []):
+        return results[0]["adid"]
+    else:
         raise RuntimeError(
             f"No listings returned for query '{query}'; cannot run detail benchmark."
         )
-    return results[0]["adid"]
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -256,26 +256,23 @@ def main(argv: Iterable[str] | None = None) -> int:
                 )
             )
 
-        # Test early termination optimization with limited results query
-        results.append(
-            benchmark_listings(
-                client,
-                base_url=args.base_url,
-                query="acemagic",  # Limited results query
-                page_count=10,
-                iterations=args.iterations,
+        results.extend(
+            (
+                benchmark_listings(
+                    client,
+                    base_url=args.base_url,
+                    query="acemagic",  # Limited results query
+                    page_count=10,
+                    iterations=args.iterations,
+                ),
+                benchmark_listing_detail(
+                    client,
+                    base_url=args.base_url,
+                    listing_id=detail_listing_id,
+                    iterations=args.iterations,
+                ),
             )
         )
-
-        results.append(
-            benchmark_listing_detail(
-                client,
-                base_url=args.base_url,
-                listing_id=detail_listing_id,
-                iterations=args.iterations,
-            )
-        )
-
         for max_concurrent_details in args.max_concurrency:
             for page_count in args.page_counts:
                 detailed_result = benchmark_listings_detailed(

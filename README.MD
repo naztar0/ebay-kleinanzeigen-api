@@ -203,11 +203,30 @@ uv run --group dev python scripts/benchmark.py \
 ### 🔧 Production Ready
 
 - **Consistent Error Responses**: All errors return `{"success": false, "error": "..."}` regardless of failure type
+- **IP Block Detection**: HTTP 503 with `error_category: "ip_banned"` when Kleinanzeigen temporarily blocks the host IP — never silently returns empty results
 - **Rate Limiting**: Optional per-IP rate limiting via `APP_RATE_LIMIT_ENABLED=true`
 - **CORS**: Configurable via `APP_CORS_ALLOW_ORIGINS`
 - **Request Tracing**: `X-Request-ID` header on every response for log correlation
 - **Health Check**: `GET /health` endpoint for Docker and load-balancer probes
 - **Docker Optimized**: Fast container builds with uv package manager
+
+### ⚠️ IP Blocking
+
+Kleinanzeigen may temporarily block an IP range that sends too many requests in a short period. When this happens the API returns HTTP **503** instead of silently returning empty results:
+
+```json
+{
+  "success": false,
+  "error": "IP range temporarily blocked by Kleinanzeigen. All page fetches returned a block response. The restriction is temporary — try again in a few hours.",
+  "error_category": "ip_banned"
+}
+```
+
+The block is usually lifted within a few hours. To reduce the risk:
+
+- Keep `APP_PAGE_FETCH_CONCURRENCY` at the default (`3`) — avoid setting it higher
+- Avoid hammering the API with parallel clients from the same host
+- When self-hosting on a shared VPS, note that other tenants sharing your IP range can also trigger a block
 
 API documentation is available at `http://localhost:8000/docs` when running locally.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import sys
 
 from fastapi import FastAPI, HTTPException, Request
@@ -15,16 +16,15 @@ from .api.routes import health, listing_details, listings, listings_detailed
 from .core.config import get_settings
 from .core.lifespan import lifespan
 from .core.logging import setup_logging
+from .exceptions import KleinanzeigenBannedError
 from .middleware.request_id import RequestIDMiddleware
 from .models.responses import ApiErrorResponse
 
 if sys.platform != "win32":
-    try:
+    with contextlib.suppress(ImportError):
         import uvloop
 
         uvloop.install()
-    except ImportError:
-        pass
 
 
 def create_app() -> FastAPI:
@@ -64,6 +64,17 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(RequestIDMiddleware)
+
+    @app.exception_handler(KleinanzeigenBannedError)
+    async def banned_exc_handler(
+        request: Request, exc: KleinanzeigenBannedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content=ApiErrorResponse(
+                error=str(exc), error_category="ip_banned"
+            ).model_dump(),
+        )
 
     @app.exception_handler(HTTPException)
     async def http_exc_handler(request: Request, exc: HTTPException) -> JSONResponse:

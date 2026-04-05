@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-05
+
+### Added
+- IP-ban detection: scraper checks response body for Kleinanzeigen's block page before calling `raise_for_status()`, handling both HTTP 200 and HTTP 403 variants of the block response
+- `KleinanzeigenBannedError` custom exception in `src/app/exceptions.py`
+- `error_category: "ip_banned"` set on `PageMetric` when a ban is detected
+- HTTP **503** response with `error_category: "ip_banned"` when all fetched pages return a block — never silently returns empty results when the IP is blocked
+- `network_error` category on `PageMetric` for non-status HTTP errors (connection, timeout)
+- Separate `except httpx.HTTPStatusError` / `except httpx.HTTPError` handlers in `_fetch_listings_page` for finer error categorisation
+
+### Fixed
+- API previously returned `success: true` with 0 results when the host IP was blocked — a silent failure that was impossible to distinguish from a legitimate empty search
+
 ## [2.0.0] - 2026-04-05
 
 ### Added

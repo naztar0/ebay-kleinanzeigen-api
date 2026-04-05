@@ -11,6 +11,7 @@ from fastapi_cache.decorator import cache
 from loguru import logger
 
 from ...api.dependencies import ScraperDep
+from ...exceptions import KleinanzeigenBannedError
 from ...models import ApiResponse, ListingDetail
 
 router = APIRouter(prefix="/v1", tags=["Listing Details"])
@@ -29,6 +30,8 @@ async def get_listing_detail(
     started_at = time.perf_counter()
     try:
         detail = await scraper.fetch_listing_detail(listing_id)
+    except KleinanzeigenBannedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except httpx.HTTPStatusError as exc:
         if exc.response.is_redirect or exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Listing not found") from exc

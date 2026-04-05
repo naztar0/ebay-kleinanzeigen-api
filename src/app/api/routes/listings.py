@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi_cache.decorator import cache
 
 from ...api.dependencies import ScraperDep
+from ...exceptions import KleinanzeigenBannedError
 from ...models import ApiResponse, ListingsResponse
 
 router = APIRouter(prefix="/v1", tags=["Listings"])
@@ -36,16 +37,20 @@ async def search_listings(
     ),
 ) -> ApiResponse[ListingsResponse]:
     started_at = time.perf_counter()
-    listings, metrics, pagination = await scraper.fetch_listings(
-        query=query,
-        location=location,
-        radius=radius,
-        min_price=min_price,
-        max_price=max_price,
-        sort_by=sort_by,
-        page_count=page_count,
-        start_page=start_page,
-    )
+    try:
+        listings, metrics, pagination = await scraper.fetch_listings(
+            query=query,
+            location=location,
+            radius=radius,
+            min_price=min_price,
+            max_price=max_price,
+            sort_by=sort_by,
+            page_count=page_count,
+            start_page=start_page,
+        )
+    except KleinanzeigenBannedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     elapsed = round(time.perf_counter() - started_at, 3)
     payload = ListingsResponse(
         results=listings,
