@@ -101,7 +101,7 @@ def benchmark_listing_detail(
     url = f"{base_url}/v1/listings/{listing_id}"
     times = [run_request(client, "GET", url) for _ in range(iterations)]
     return BenchmarkResult(
-        name=f"/v1/listings/{{listing_id}} (id={listing_id})",
+        name=f"/v1/listings/{listing_id} (id={listing_id})",
         iterations=iterations,
         elapsed_times=times,
     )

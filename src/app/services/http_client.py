@@ -41,9 +41,9 @@ async def fetch_json(
         return response.json()
     except httpx.HTTPStatusError as exc:
         logger.warning(
-            "HTTP error %d for %s", exc.response.status_code, exc.request.url
+            "HTTP error {} for {}", exc.response.status_code, exc.request.url
         )
         raise
     except httpx.HTTPError as exc:
-        logger.error("HTTP client error for %s: %s", url, exc)
+        logger.error("HTTP client error for {}: {}", url, exc)
         raise

@@ -60,11 +60,11 @@ async def get_listing_detail(
         if exc.response.is_redirect or exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Listing not found") from exc
         logger.warning(
-            "HTTP error %d fetching listing %s", exc.response.status_code, listing_id
+            "HTTP error {} fetching listing {}", exc.response.status_code, listing_id
         )
         raise HTTPException(status_code=502, detail="Failed to fetch listing") from exc
     except httpx.HTTPError as exc:
-        logger.exception("Network error fetching listing %s: %s", listing_id, exc)
+        logger.exception("Network error fetching listing {}: {}", listing_id, exc)
         raise HTTPException(status_code=502, detail="Failed to fetch listing") from exc
 
     elapsed = round(time.perf_counter() - started_at, 3)

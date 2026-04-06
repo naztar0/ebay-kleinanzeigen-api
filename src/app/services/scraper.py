@@ -92,7 +92,7 @@ class KleinanzeigenScraperService:
     async def fetch_listing_detail(self, listing_id: str) -> ListingDetail:
         """Fetch and parse the full detail page for a single listing."""
         url = self.LISTING_DETAILS_URL.format(listing_id=listing_id)
-        logger.debug("Fetching listing detail from %s", url)
+        logger.debug("Fetching listing detail from {}", url)
 
         response = await self._client.get(url)
         if _is_ip_ban_page(response.text):
@@ -179,7 +179,7 @@ class KleinanzeigenScraperService:
             result = raw_results[page_number]
             if isinstance(result, Exception):
                 logger.warning(
-                    "Page %d fetch raised unexpected exception: %s",
+                    "Page {} fetch raised unexpected exception: {}",
                     page_number,
                     result,
                 )
@@ -203,7 +203,7 @@ class KleinanzeigenScraperService:
 
             if is_redirect:
                 logger.info(
-                    "Page %d returned redirect — pagination exhausted, stopping",
+                    "Page {} returned redirect — pagination exhausted, stopping",
                     page_number,
                 )
                 break
@@ -352,7 +352,7 @@ class KleinanzeigenScraperService:
                     detail = await self.fetch_listing_detail(summary.ad_id)
                 except httpx.HTTPError as exc:
                     logger.warning(
-                        "Failed to fetch detail for %s: %s", summary.ad_id, exc
+                        "Failed to fetch detail for {}: {}", summary.ad_id, exc
                     )
                     return None
                 return DetailedListingItem(summary=summary, detail=detail)
@@ -366,7 +366,7 @@ class KleinanzeigenScraperService:
             if isinstance(result, DetailedListingItem):
                 combined.append(result)
             elif isinstance(result, Exception):
-                logger.warning("Detail fetch task failed: %s", result)
+                logger.warning("Detail fetch task failed: {}", result)
         return combined
 
     async def _fetch_listings_page(
@@ -395,7 +395,7 @@ class KleinanzeigenScraperService:
             max_price=max_price,
             sort_by=sort_by,
         )
-        logger.debug("Fetching listing page %d via %s", page_number, url)
+        logger.debug("Fetching listing page {} via {}", page_number, url)
 
         try:
             response = await self._client.get(url)
@@ -403,7 +403,7 @@ class KleinanzeigenScraperService:
             if response.is_redirect:
                 duration = time.perf_counter() - start
                 logger.debug(
-                    "Page %d returned %d redirect — no more pages",
+                    "Page {} returned {} redirect — no more pages",
                     page_number,
                     response.status_code,
                 )
@@ -423,7 +423,7 @@ class KleinanzeigenScraperService:
             if _is_ip_ban_page(response.text):
                 duration = time.perf_counter() - start
                 logger.error(
-                    "IP range temporarily blocked by Kleinanzeigen (page %d, HTTP %d)",
+                    "IP range temporarily blocked by Kleinanzeigen (page {}, HTTP {})",
                     page_number,
                     response.status_code,
                 )
@@ -461,7 +461,7 @@ class KleinanzeigenScraperService:
         except httpx.HTTPStatusError as exc:
             duration = time.perf_counter() - start
             logger.warning(
-                "HTTP %d on page %d: %s",
+                "HTTP {} on page {}: {}",
                 exc.response.status_code,
                 page_number,
                 exc,
@@ -479,7 +479,7 @@ class KleinanzeigenScraperService:
 
         except httpx.HTTPError as exc:
             duration = time.perf_counter() - start
-            logger.warning("Network error on page %d: %s", page_number, exc)
+            logger.warning("Network error on page {}: {}", page_number, exc)
             metric = PageMetric(
                 page_number=page_number,
                 time_taken=duration,
@@ -577,11 +577,11 @@ class KleinanzeigenScraperService:
         match = re.search(r"von\s+([\d.]+)\s+Ergebnis", text)
         if not match:
             return None
-        total_str = match.group(1).replace(".", "")
+        total_str = match[1].replace(".", "")
         try:
             return int(total_str)
         except ValueError:
-            logger.warning("Failed to parse total results from: %s", text)
+            logger.warning("Failed to parse total results from: {}", text)
             return None
 
     def _parse_listing_summary(self, article: Tag) -> ListingSummary | None:

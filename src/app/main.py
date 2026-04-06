@@ -22,7 +22,7 @@ from .models.responses import ApiErrorResponse
 
 if sys.platform != "win32":
     with contextlib.suppress(ImportError):
-        import uvloop
+        import uvloop  # pyright: ignore[reportMissingImports]
 
         uvloop.install()
 
@@ -85,7 +85,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_exc_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled exception on %s: %s", request.url, exc)
+        logger.exception("Unhandled exception on {}: {}", request.url, exc)
         return JSONResponse(
             status_code=500,
             content=ApiErrorResponse(

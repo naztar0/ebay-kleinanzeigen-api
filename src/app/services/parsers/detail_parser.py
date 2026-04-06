@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Union
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 
-def _clean_text(value: Optional[Union[str, Tag]]) -> Optional[str]:
+def _clean_text(value: str | Tag | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, Tag):
@@ -15,7 +14,7 @@ def _clean_text(value: Optional[Union[str, Tag]]) -> Optional[str]:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def parse_price(price_text: Optional[str]) -> Dict[str, object]:
+def parse_price(price_text: str | None) -> dict[str, object]:
     if not price_text:
         return {"amount": 0.0, "currency": "EUR", "negotiable": False}
 
@@ -32,7 +31,7 @@ def parse_price(price_text: Optional[str]) -> Dict[str, object]:
     return {"amount": amount, "currency": "EUR", "negotiable": negotiable}
 
 
-def parse_categories(soup: BeautifulSoup) -> List[str]:
+def parse_categories(soup: BeautifulSoup) -> list[str]:
     return [
         tag.get_text(strip=True)
         for tag in soup.select(".breadcrump-link")
@@ -40,8 +39,8 @@ def parse_categories(soup: BeautifulSoup) -> List[str]:
     ]
 
 
-def parse_images(soup: BeautifulSoup) -> List[str]:
-    images: List[str] = []
+def parse_images(soup: BeautifulSoup) -> list[str]:
+    images: list[str] = []
     for tag in soup.select("#viewad-image"):
         src = tag.get("src")
         if isinstance(src, str):
@@ -49,7 +48,7 @@ def parse_images(soup: BeautifulSoup) -> List[str]:
     return images
 
 
-def parse_seller(soup: BeautifulSoup) -> Dict[str, object]:
+def parse_seller(soup: BeautifulSoup) -> dict[str, object]:
     seller = {
         "name": _clean_text(
             soup.select_one(".userprofile-vip, .userprofile-header-user-name")
@@ -76,8 +75,8 @@ def parse_seller(soup: BeautifulSoup) -> Dict[str, object]:
     return seller
 
 
-def parse_details(soup: BeautifulSoup) -> Dict[str, str]:
-    details: Dict[str, str] = {}
+def parse_details(soup: BeautifulSoup) -> dict[str, str]:
+    details: dict[str, str] = {}
     for item in soup.select("#viewad-details .addetailslist--detail"):
         parts = list(item.stripped_strings)
         if len(parts) >= 2:
@@ -85,7 +84,7 @@ def parse_details(soup: BeautifulSoup) -> Dict[str, str]:
     return details
 
 
-def parse_location(soup: BeautifulSoup) -> Dict[str, Optional[str]]:
+def parse_location(soup: BeautifulSoup) -> dict[str, str | None]:
     locality = soup.select_one("#viewad-locality")
     location_text = _clean_text(locality.get_text() if locality else None)
     if not location_text:
@@ -103,7 +102,7 @@ def parse_location(soup: BeautifulSoup) -> Dict[str, Optional[str]]:
     return {"zip": zip_code, "city": city.strip(), "state": state}
 
 
-def parse_extra_info(soup: BeautifulSoup) -> Dict[str, Optional[str]]:
+def parse_extra_info(soup: BeautifulSoup) -> dict[str, str | None]:
     created_at_element = soup.select_one("#viewad-extra-info span")
     created_at_text = created_at_element.get_text() if created_at_element else None
     return {"created_at": _clean_text(created_at_text)}

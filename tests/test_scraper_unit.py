@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import anyio
 import httpx
 import pytest
 from bs4 import BeautifulSoup
@@ -12,8 +13,17 @@ from tests.html_fixtures import IP_BAN_HTML, LISTING_PAGE_HTML
 
 
 @pytest.fixture
-def scraper() -> KleinanzeigenScraperService:
-    return KleinanzeigenScraperService(client=httpx.AsyncClient())
+def scraper(request: pytest.FixtureRequest) -> KleinanzeigenScraperService:
+    client = httpx.AsyncClient()
+
+    def _close() -> None:
+        async def _aclose() -> None:
+            await client.aclose()
+
+        anyio.run(_aclose)
+
+    request.addfinalizer(_close)
+    return KleinanzeigenScraperService(client=client)
 
 
 class TestIsBanPage:
@@ -209,6 +219,46 @@ class TestListingViews:
             scraper = KleinanzeigenScraperService(client=client)
             assert await scraper.fetch_listing_views("12345678") == 0
 
+    @pytest.mark.anyio
+    async def test_num_visits_int_returns_value(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"numVisits": 123})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            scraper = KleinanzeigenScraperService(client=client)
+            assert await scraper.fetch_listing_views("12345678") == 123
+
+    @pytest.mark.anyio
+    async def test_num_visits_str_with_leading_zeros_returns_parsed_int(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"numVisitsStr": "00123"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            scraper = KleinanzeigenScraperService(client=client)
+            assert await scraper.fetch_listing_views("12345678") == 123
+
+    @pytest.mark.anyio
+    async def test_num_visits_str_with_non_digits_returns_none(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"numVisitsStr": "123 views"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            scraper = KleinanzeigenScraperService(client=client)
+            assert await scraper.fetch_listing_views("12345678") is None
+
+    @pytest.mark.anyio
+    async def test_http_error_returns_none(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, json={"error": "internal error"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            scraper = KleinanzeigenScraperService(client=client)
+            assert await scraper.fetch_listing_views("12345678") is None
+
 
 class TestFetchListingsPagination:
     @pytest.mark.anyio
@@ -216,7 +266,7 @@ class TestFetchListingsPagination:
         self, scraper, monkeypatch
     ):
         called_pages: list[int] = []
-        scraper._settings.page_fetch_concurrency = 1
+        monkeypatch.setattr(scraper._settings, "page_fetch_concurrency", 1)
 
         async def fake_fetch_listings_page(
             *,
