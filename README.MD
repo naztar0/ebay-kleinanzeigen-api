@@ -33,8 +33,7 @@ Visit [kleinanzeigen-agent.de](https://kleinanzeigen-agent.de/features/developer
 ### Prerequisites
 
 - Python 3.12 or higher
-- pip (Python package manager)
-- Playwright
+- [uv](https://github.com/astral-sh/uv) package manager (recommended)
 
 ### Installation
 
@@ -45,38 +44,23 @@ git clone https://github.com/DanielWTE/ebay-kleinanzeigen-api.git
 cd ebay-kleinanzeigen-api
 ```
 
-2. Install dependencies
-
-```sh
-pip install -r requirements.txt
-playwright install chromium
-```
-
-3. Start the API
-
-```sh
-uvicorn main:app --reload
-```
-
-The API will be available at `http://localhost:8000`
-
-### Installation using UV
-
-#### Prerequisites
-
-- uv package manager
-
-#### Installation of dependencies
+1. Install dependencies
 
 ```sh
 uv sync
 ```
 
-#### Start the API
+1. Start the API
 
 ```sh
-uv run uvicorn main:app --reload
+# Development
+uv run uvicorn src.app.main:app --reload
+
+# Windows
+uv run uvicorn src.app.main:app
 ```
+
+The API will be available at `http://localhost:8000`
 
 ### Installation using Docker
 
@@ -86,7 +70,7 @@ uv run uvicorn main:app --reload
 docker build -t ebay-kleinanzeigen-api .
 ```
 
-2. Run the Docker container
+1. Run the Docker container
 
 ```sh
 docker run -p 8000:8000 ebay-kleinanzeigen-api
@@ -96,150 +80,155 @@ The API will be available at `http://localhost:8000`
 
 ### API Endpoints
 
-#### 1. Fetch Listings (Standard)
+#### 1. Fetch Listings
 
-**Endpoint:** `GET /inserate`
+**Endpoint:** `GET /v1/listings`
 
-**Description:** Retrieves a list of listings based on search criteria.
+**Description:** Retrieves listings as summary records with filtering and pagination.
 
 ##### Query Parameters
 
-- **`query`** *(string, optional)*: The search term (e.g., "fahrrad" to search for bicycles).
-- **`location`** *(string, optional)*: The location or postal code to narrow the search (e.g., `10178` for Berlin).
-- **`radius`** *(integer, optional)*: The search radius in kilometers from the specified location (e.g., `5` for a 5 km radius).
-- **`min_price`** *(integer, optional)*: The minimum price in Euros for the listings (e.g., `200` for at least 200 Euros).
-- **`max_price`** *(integer, optional)*: The maximum price in Euros for the listings (e.g., `500` for at most 500 Euros).
-- **`page_count`** *(integer, optional)*: The number of pages to search or return (e.g., `5` for the first 5 pages, default is 1, max: 20 pages).
+- **`query`** *(string, optional)*: The search term (e.g., `"fahrrad"`).
+- **`location`** *(string, optional)*: Location or city name (e.g., `"Berlin"`).
+- **`radius`** *(integer, optional)*: Search radius in km (1–100).
+- **`min_price`** *(integer, optional)*: Minimum price in EUR.
+- **`max_price`** *(integer, optional)*: Maximum price in EUR.
+- **`sort_by`** *(string, optional)*: `"lowest"` / `"price"` for ascending, `"highest"` for descending, or omit for newest first.
+- **`page_count`** *(integer, optional)*: Pages to fetch (1–10, default `1`). Pages are fetched in parallel.
+- **`start_page`** *(integer, optional)*: Starting page number (1–200, default `1`).
 
 ##### Example Request
 
 ```http
-GET /inserate?query=fahrrad&location=10178&radius=5&min_price=200&page_count=5
+GET /v1/listings?query=fahrrad&location=Berlin&radius=20&min_price=50&page_count=3
 ```
 
 #### 2. Fetch Listing Details
 
-**Endpoint:** `GET /inserat/{id}`
+**Endpoint:** `GET /v1/listings/{listing_id}`
 
-**Description:** Retrieves detailed information about a specific listing.
-
-##### Path Parameters
-
-- **`id`** *(string)*: The unique identifier of the listing to fetch details for.
+**Description:** Retrieves full details for a single listing (title, description, images, seller, views, etc.).
 
 ##### Example Request
 
 ```http
-GET /inserat/12345
+GET /v1/listings/1641118170
 ```
 
 #### 3. Fetch Listings with Details (Combined)
 
-**Endpoint:** `GET /inserate-detailed`
+**Endpoint:** `GET /v1/listings-detailed`
 
-**Description:** Retrieves listings and their detailed information in a single request.
+**Description:** Retrieves listing summaries and their full detail pages in a single request. Detail pages are fetched concurrently.
 
 ##### Query Parameters
 
-Same as `/inserate` endpoint, plus:
+Same as `/v1/listings`, plus:
 
-- **`max_concurrent_details`** *(integer, optional)*: Maximum concurrent detail fetches (default: 5, max: 10).
+- **`max_concurrent_details`** *(integer, optional)*: Max concurrent detail fetches (1–20, default `10`).
 
 ##### Example Request
 
 ```http
-GET /inserate-detailed?query=laptop&page_count=2&max_concurrent_details=5
+GET /v1/listings-detailed?query=laptop&page_count=2&max_concurrent_details=10
 ```
 
 ### Documentation
 
 #### API Response Format
 
-All API endpoints return responses in the following JSON format:
-
-##### API Response Format
+All responses follow a consistent envelope:
 
 ```json
 {
   "success": true,
-  "time_taken": 1.23,
-  "unique_results": 100,
-  "data": [...],
-  "performance_metrics": {
-    "pages_requested": 5,
-    "pages_successful": 5,
-    "success_rate": 100.0,
-    "average_page_time": 2.45
-  }
+  "time_taken": 0.31,
+  "data": { ... }
 }
 ```
 
-##### Combined Endpoint Response Format
+Application-generated error responses use:
 
 ```json
 {
-  "success": true,
-  "time_taken": 3.45,
-  "unique_results": 25,
-  "data": [
-    {
-      "adid": "123456",
-      "title": "Example Item",
-      "price": "100",
-      "details": {
-        "id": "123456",
-        "description": "Full description...",
-        "seller": {...},
-        "location": {...}
-      }
-    }
-  ],
-  "performance_metrics": {
-    "listings_found": 25,
-    "details_fetched": 25,
-    "success_rate": 100.0
-  }
+  "success": false,
+  "error": "Listing not found"
 }
 ```
 
-## Performance Features
+`422 Unprocessable Entity` is the one exception: FastAPI returns its default validation payload with a `detail` array for invalid query/path input.
+
+See [`docs/API_USAGE.md`](docs/API_USAGE.md) for full response schemas, Python examples, configuration reference, and deployment tips.
 
 ## 📊 Performance Benchmarks
 
-Performance tests conducted on **Arch Linux** with **Intel i7-1260P** processor:
+Benchmarks run locally with **3 iterations per case**. The first request is a cold fetch from Kleinanzeigen; subsequent identical requests within 60 seconds hit the in-memory cache. The table below shows all three iterations combined — `min` is typically a cache hit, `max` is a realistic cold-start figure.
 
-| Endpoint | Operation | Avg Time | Min Time | Max Time | Success Rate | Results |
-|----------|-----------|----------|----------|----------|--------------|---------|
-| Root | API status check | 0.004s | 0.001s | 0.009s | 100% | - |
-| Listings | 1 page search | 1.209s | 1.081s | 1.596s | 100% | 25 |
-| Listings | 5 pages search | 2.436s | 2.328s | 2.532s | 100% | 125 |
-| Listings | 10 pages search | 4.989s | 4.790s | 5.229s | 100% | 250 |
-| Details | Single listing details | 1.072s | 0.928s | 1.276s | 100% | 1 |
-| Combined | 1 page + details | 9.058s | 8.804s | 9.319s | 100% | 25 |
-| Combined | 2 pages + details | 17.512s | 17.063s | 18.038s | 100% | 50 |
+Run the benchmark yourself after starting the server:
 
-### Performance Highlights
+```sh
+uv run --group dev python scripts/benchmark.py \
+  --iterations 3 --page-counts 1,3,5 \
+  --max-concurrency 5,10 --query pc \
+  --chart-output assets/benchmarks.png
+```
 
-- **Single page search**: ~1.2s average response time
-- **10-page search**: ~5.0s average response time  
-- **Individual listing details**: ~1.1s average response time
-- **Combined search + details**: ~9.1s average for 1 page with full details
+| Endpoint | Parameters | Avg (s) | Min (s) | Max (s) |
+|---|---|---:|---:|---:|
+| `/v1/listings` | `pages=1` | 0.315 | 0.199 | 0.448 |
+| `/v1/listings` | `pages=3` | 0.335 | 0.275 | 0.405 |
+| `/v1/listings` | `pages=5` | 0.629 | 0.539 | 0.716 |
+| `/v1/listings` | `pages=3`, `sort=price` | 0.335 | 0.298 | 0.367 |
+| `/v1/listings` | `pages=3`, `start=3` | 0.388 | 0.299 | 0.436 |
+| `/v1/listings` | `query=acemagic`, `pages=10` | 0.393 | 0.353 | 0.461 |
+| `/v1/listings/{id}` | single listing | 0.342 | 0.326 | 0.368 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=5` | 2.838 | 2.765 | 2.898 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=5` | 7.018 | 6.814 | 7.421 |
+| `/v1/listings-detailed` | `pages=5`, `concurrency=5` | 11.370 | 11.112 | 11.704 |
+| `/v1/listings-detailed` | `pages=1`, `concurrency=10` | 1.941 | 1.833 | 2.022 |
+| `/v1/listings-detailed` | `pages=3`, `concurrency=10` | 5.161 | 4.871 | 5.348 |
 
-*All tests performed with uvloop optimization and browser context pooling enabled.*
+> `query=pc`, `min_price=10`, `max_price=300` used for all listings benchmarks unless stated otherwise.  
+> `acemagic` benchmark demonstrates early-termination: requesting 10 pages but only ~2 exist.
+
+![Benchmark chart](assets/benchmarks.png)
 
 ### 🚀 Technical Features
 
-- **uvloop Integration**: High-performance asyncio event loop
-- **Context Pooling**: Efficient browser resource reuse
-- **Memory Optimization**: Automatic garbage collection and efficient processing
-- **Intelligent Concurrency**: Optimal concurrent processing with resource control
+- **Parallel Page Fetching**: Multiple pages fetched concurrently — `pages=3` takes the same wall-clock time as `pages=1`
+- **Shared Connection Pool**: Single `httpx.AsyncClient` reused across all requests, eliminating per-request TLS overhead
+- **In-Memory Response Cache**: Identical queries served from cache for 60 s (listings) or 300 s (single detail)
+- **Early Termination**: Stops fetching as soon as Kleinanzeigen signals no further pages (redirect detection)
+- **Automatic Deduplication**: Duplicate ad IDs removed when combining results from multiple pages
+- **uvloop**: High-performance asyncio event loop used automatically on Linux/macOS
 
 ### 🔧 Production Ready
 
-- **Clean API Responses**: Minimal overhead with essential data only
-- **Resource Management**: Automatic cleanup and efficient resource usage
-- **Scalable Architecture**: Handles concurrent requests efficiently
+- **Consistent Error Responses**: Application errors return `{"success": false, "error": "..."}`; FastAPI validation errors keep the standard `422` format
+- **IP Block Detection**: HTTP 503 with `error_category: "ip_banned"` when Kleinanzeigen temporarily blocks the host IP — never silently returns empty results
+- **Rate Limiting**: Optional per-IP rate limiting via `APP_RATE_LIMIT_ENABLED=true`
+- **CORS**: Configurable via `APP_CORS_ALLOW_ORIGINS`
+- **Request Tracing**: `X-Request-ID` echoed on every response when the client sends a safe value (printable ASCII, max 128 chars after trim); otherwise a server-generated UUID is used
+- **Health Check**: `GET /health` endpoint for Docker and load-balancer probes
 - **Docker Optimized**: Fast container builds with uv package manager
+
+### ⚠️ IP Blocking
+
+Kleinanzeigen may temporarily block an IP range that sends too many requests in a short period. When this happens the API returns HTTP **503** instead of silently returning empty results:
+
+```json
+{
+  "success": false,
+  "error": "IP range temporarily blocked by Kleinanzeigen. All page fetches returned a block response. The restriction is temporary — try again in a few hours.",
+  "error_category": "ip_banned"
+}
+```
+
+The block is usually lifted within a few hours. To reduce the risk:
+
+- Keep `APP_PAGE_FETCH_CONCURRENCY` at the default (`3`) — avoid setting it higher
+- Avoid hammering the API with parallel clients from the same host
+- When self-hosting on a shared VPS, note that other tenants sharing your IP range can also trigger a block
 
 API documentation is available at `http://localhost:8000/docs` when running locally.
 
