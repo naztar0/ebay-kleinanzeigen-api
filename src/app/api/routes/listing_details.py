@@ -11,16 +11,42 @@ from fastapi_cache.decorator import cache
 from loguru import logger
 
 from ...api.dependencies import ScraperDep
-from ...exceptions import KleinanzeigenBannedError
-from ...models import ApiResponse, ListingDetail
+from ...core.config import get_settings
+from ...models import ApiErrorResponse, ApiResponse, ListingDetail
 
 router = APIRouter(prefix="/v1", tags=["Listing Details"])
+settings = get_settings()
+LISTING_DETAIL_RESPONSES = {
+    400: {
+        "model": ApiErrorResponse,
+        "description": "Invalid listing ID format.",
+    },
+    404: {
+        "model": ApiErrorResponse,
+        "description": "Listing expired, removed, or redirected.",
+    },
+    422: {
+        "description": "Validation error from FastAPI.",
+    },
+    502: {
+        "model": ApiErrorResponse,
+        "description": "Downstream Kleinanzeigen request failed.",
+    },
+    503: {
+        "model": ApiErrorResponse,
+        "description": "Kleinanzeigen temporarily blocked the host IP range.",
+    },
+}
 
 _LISTING_ID_RE = re.compile(r"^\d{5,15}(-[a-z0-9-]+)?$")
 
 
-@router.get("/listings/{listing_id}", response_model=ApiResponse[ListingDetail])
-@cache(expire=300)
+@router.get(
+    "/listings/{listing_id}",
+    response_model=ApiResponse[ListingDetail],
+    responses=LISTING_DETAIL_RESPONSES,
+)
+@cache(expire=settings.cache_ttl_detail_seconds)
 async def get_listing_detail(
     listing_id: str, scraper: ScraperDep
 ) -> ApiResponse[ListingDetail]:
@@ -30,8 +56,6 @@ async def get_listing_detail(
     started_at = time.perf_counter()
     try:
         detail = await scraper.fetch_listing_detail(listing_id)
-    except KleinanzeigenBannedError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except httpx.HTTPStatusError as exc:
         if exc.response.is_redirect or exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Listing not found") from exc

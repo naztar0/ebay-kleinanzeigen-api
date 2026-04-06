@@ -2,7 +2,7 @@
 name = "ebay-kleinanzeigen-api"
 version = "2.1.0"
 description = "Refined Kleinanzeigen scraping API"
-readme = "README.md"
+readme = "README.MD"
 requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.13.4",
@@ -24,5 +24,11 @@ extend-select = ["I"]
 dev = [
     "matplotlib>=3.10.6",
     "pytest>=8.4.1",
+    "respx>=0.21.0",
     "ruff>=0.13.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v"

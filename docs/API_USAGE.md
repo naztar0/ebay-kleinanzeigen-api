@@ -113,8 +113,8 @@ curl "http://localhost:8000/v1/listings?query=fahrrad&location=Berlin&radius=20"
 | Field | Description |
 |---|---|
 | `pages_requested` | Number of pages requested |
-| `pages_fetched` | Pages successfully fetched |
-| `start_page` / `end_page` | Page range |
+| `pages_fetched` | Pages actually processed before completion or early termination |
+| `start_page` / `end_page` | Processed page range |
 | `total_available_results` | Total results on Kleinanzeigen (from breadcrumb, if detected) |
 | `results_per_page` | Always 25 |
 | `duplicates_removed` | Listings removed because the same `adid` appeared on multiple pages |
@@ -247,7 +247,7 @@ Used by Docker `HEALTHCHECK`, Kubernetes liveness probes, and reverse-proxy heal
 
 ## Error Responses
 
-All errors — validation failures, network errors, expired listings — use the same shape:
+Application-generated errors use this shape:
 
 ```json
 {
@@ -257,11 +257,27 @@ All errors — validation failures, network errors, expired listings — use the
 }
 ```
 
+FastAPI validation failures (`422`) do not use `ApiErrorResponse`; they keep the default framework payload:
+
+```json
+{
+  "detail": [
+    {
+      "type": "greater_than_equal",
+      "loc": ["query", "radius"],
+      "msg": "Input should be greater than or equal to 1",
+      "input": 0,
+      "ctx": { "ge": 1 }
+    }
+  ]
+}
+```
+
 | HTTP status | Meaning |
 |---|---|
-| `400` | Invalid parameter (e.g. bad `listing_id` format, unknown `sort_by` value) |
+| `400` | Invalid parameter handled by the application (e.g. bad `listing_id` format) |
 | `404` | Listing has expired or been removed |
-| `422` | FastAPI validation error (query param out of range, wrong type) |
+| `422` | FastAPI validation error (query param out of range, wrong type) with default `detail` array |
 | `429` | Rate limit exceeded (when `APP_RATE_LIMIT_ENABLED=true`) |
 | `500` | Unhandled server error |
 | `502` | Downstream Kleinanzeigen request failed |

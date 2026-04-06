@@ -147,7 +147,7 @@ All responses follow a consistent envelope:
 }
 ```
 
-Error responses always use:
+Application-generated error responses use:
 
 ```json
 {
@@ -155,6 +155,8 @@ Error responses always use:
   "error": "Listing not found"
 }
 ```
+
+`422 Unprocessable Entity` is the one exception: FastAPI returns its default validation payload with a `detail` array for invalid query/path input.
 
 See [`docs/API_USAGE.md`](docs/API_USAGE.md) for full response schemas, Python examples, configuration reference, and deployment tips.
 
@@ -202,7 +204,7 @@ uv run --group dev python scripts/benchmark.py \
 
 ### 🔧 Production Ready
 
-- **Consistent Error Responses**: All errors return `{"success": false, "error": "..."}` regardless of failure type
+- **Consistent Error Responses**: Application errors return `{"success": false, "error": "..."}`; FastAPI validation errors keep the standard `422` format
 - **IP Block Detection**: HTTP 503 with `error_category: "ip_banned"` when Kleinanzeigen temporarily blocks the host IP — never silently returns empty results
 - **Rate Limiting**: Optional per-IP rate limiting via `APP_RATE_LIMIT_ENABLED=true`
 - **CORS**: Configurable via `APP_CORS_ALLOW_ORIGINS`

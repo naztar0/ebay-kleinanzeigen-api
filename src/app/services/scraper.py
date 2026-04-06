@@ -78,8 +78,10 @@ class KleinanzeigenScraperService:
             return visits
         visits_str = data.get("numVisitsStr")
         if isinstance(visits_str, str):
-            stripped = visits_str.lstrip("0")
-            return int(stripped) if stripped.isdigit() else None
+            cleaned = visits_str.strip()
+            if cleaned.isdigit():
+                stripped = cleaned.lstrip("0")
+                return int(stripped) if stripped else 0
         return None
 
     @staticmethod
@@ -147,33 +149,34 @@ class KleinanzeigenScraperService:
         Pagination stops early if a redirect (exhausted pages) is detected.
         """
         page_numbers = list(range(start_page, start_page + page_count))
-        semaphore = asyncio.Semaphore(self._settings.page_fetch_concurrency)
 
         async def _fetch(
-            n: int,
+            page_number: int,
         ) -> tuple[PageMetric, list[ListingSummary], bool, int | None]:
-            async with semaphore:
-                return await self._fetch_listings_page(
-                    page_number=n,
-                    query=query,
-                    location=location,
-                    radius=radius,
-                    min_price=min_price,
-                    max_price=max_price,
-                    sort_by=sort_by,
-                )
+            return await self._fetch_listings_page(
+                page_number=page_number,
+                query=query,
+                location=location,
+                radius=radius,
+                min_price=min_price,
+                max_price=max_price,
+                sort_by=sort_by,
+            )
 
-        raw_results = await asyncio.gather(
-            *[_fetch(n) for n in page_numbers], return_exceptions=True
-        )
+        raw_results = await self._fetch_pages_until_redirect(page_numbers, _fetch)
 
         page_metrics: list[PageMetric] = []
         summaries: list[ListingSummary] = []
         seen_ad_ids: set[str] = set()
         duplicates_removed = 0
         total_available_results: int | None = None
+        highest_processed_page: int | None = None
 
-        for page_number, result in zip(page_numbers, raw_results):
+        for page_number in page_numbers:
+            if page_number not in raw_results:
+                continue
+
+            result = raw_results[page_number]
             if isinstance(result, Exception):
                 logger.warning(
                     "Page %d fetch raised unexpected exception: %s",
@@ -191,10 +194,12 @@ class KleinanzeigenScraperService:
                         error_category="exception",
                     )
                 )
+                highest_processed_page = page_number
                 continue
 
             metric, page_summaries, is_redirect, page_total = result
             page_metrics.append(metric)
+            highest_processed_page = page_number
 
             if is_redirect:
                 logger.info(
@@ -246,15 +251,73 @@ class KleinanzeigenScraperService:
 
         pagination_metadata = PaginationMetadata(
             pages_requested=page_count,
-            pages_fetched=len(successful),
+            pages_fetched=len(page_metrics),
             start_page=start_page,
-            end_page=start_page + page_count - 1,
+            end_page=highest_processed_page or start_page,
             total_available_results=total_available_results,
             results_per_page=25,
             duplicates_removed=duplicates_removed,
         )
 
         return summaries, metrics, pagination_metadata
+
+    async def _fetch_pages_until_redirect(
+        self,
+        page_numbers: list[int],
+        fetch_page,
+    ) -> dict[
+        int, tuple[PageMetric, list[ListingSummary], bool, int | None] | Exception
+    ]:
+        """Fetch pages with bounded concurrency and stop scheduling after redirect."""
+
+        raw_results: dict[
+            int, tuple[PageMetric, list[ListingSummary], bool, int | None] | Exception
+        ] = {}
+        in_flight: dict[asyncio.Task, int] = {}
+        next_index = 0
+        concurrency = self._settings.page_fetch_concurrency
+        redirect_page: int | None = None
+
+        def _schedule(page_number: int) -> None:
+            task = asyncio.create_task(fetch_page(page_number))
+            in_flight[task] = page_number
+
+        while next_index < len(page_numbers) and len(in_flight) < concurrency:
+            _schedule(page_numbers[next_index])
+            next_index += 1
+
+        while in_flight:
+            done, _ = await asyncio.wait(
+                in_flight.keys(), return_when=asyncio.FIRST_COMPLETED
+            )
+
+            for task in done:
+                page_number = in_flight.pop(task)
+                try:
+                    result = task.result()
+                except asyncio.CancelledError:
+                    continue
+                except Exception as exc:
+                    raw_results[page_number] = exc
+                else:
+                    raw_results[page_number] = result
+                    if result[2] and (
+                        redirect_page is None or page_number < redirect_page
+                    ):
+                        redirect_page = page_number
+
+            if redirect_page is not None:
+                for task, page_number in list(in_flight.items()):
+                    if page_number > redirect_page:
+                        task.cancel()
+                        in_flight.pop(task)
+                continue
+
+            while next_index < len(page_numbers) and len(in_flight) < concurrency:
+                _schedule(page_numbers[next_index])
+                next_index += 1
+
+        return raw_results
 
     async def fetch_listings_with_details(
         self,
