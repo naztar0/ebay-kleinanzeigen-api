@@ -261,7 +261,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 benchmark_listings(
                     client,
                     base_url=args.base_url,
-                    query="acemagic",  # Limited results query
+                    query="pc",
                     page_count=10,
                     iterations=args.iterations,
                 ),

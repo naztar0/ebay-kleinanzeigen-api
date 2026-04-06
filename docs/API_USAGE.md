@@ -70,7 +70,7 @@ curl "http://localhost:8000/v1/listings?query=fahrrad&location=Berlin&radius=20"
         "price": 149.0,
         "currency": "EUR",
         "negotiable": false,
-        "description_snippet": "Guter Zustand, voll funktionsfähig..."
+        "description": "Guter Zustand, voll funktionsfähig..."
       }
     ],
     "total_results": 25,
@@ -220,7 +220,7 @@ curl "http://localhost:8000/v1/listings-detailed?query=laptop&page_count=2&max_c
         "price": 149.0,
         "currency": "EUR",
         "negotiable": false,
-        "description_snippet": "..."
+        "description": "..."
       },
       "detail": {
         "id": "1641118170",

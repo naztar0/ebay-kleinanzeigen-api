@@ -79,10 +79,10 @@ class PaginationMetadata(BaseModel):
 
     pages_requested: int = Field(..., ge=1, description="Number of pages requested")
     pages_fetched: int = Field(
-        ..., ge=0, description="Number of pages actually fetched"
+        ..., ge=0, description="Number of pages actually processed"
     )
-    start_page: int = Field(default=1, ge=1, description="Starting page number")
-    end_page: int = Field(..., ge=1, description="Ending page number")
+    start_page: int = Field(default=1, ge=1, description="First processed page")
+    end_page: int = Field(..., ge=1, description="Last processed page")
     total_available_results: int | None = Field(
         default=None,
         ge=0,
