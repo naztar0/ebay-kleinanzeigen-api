@@ -208,7 +208,7 @@ uv run --group dev python scripts/benchmark.py \
 - **IP Block Detection**: HTTP 503 with `error_category: "ip_banned"` when Kleinanzeigen temporarily blocks the host IP — never silently returns empty results
 - **Rate Limiting**: Optional per-IP rate limiting via `APP_RATE_LIMIT_ENABLED=true`
 - **CORS**: Configurable via `APP_CORS_ALLOW_ORIGINS`
-- **Request Tracing**: `X-Request-ID` header on every response for log correlation
+- **Request Tracing**: `X-Request-ID` echoed on every response when the client sends a safe value (printable ASCII, max 128 chars after trim); otherwise a server-generated UUID is used
 - **Health Check**: `GET /health` endpoint for Docker and load-balancer probes
 - **Docker Optimized**: Fast container builds with uv package manager
 

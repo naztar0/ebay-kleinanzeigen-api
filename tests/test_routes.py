@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import httpx
+import uuid
 
+import httpx
+import pytest
+
+from src.app.middleware.request_id import resolve_x_request_id
 from tests.html_fixtures import (
     DETAIL_PAGE_HTML,
     EMPTY_LISTING_PAGE_HTML,
@@ -36,6 +40,46 @@ class TestHealth:
         response = client.get("/health")
         assert "x-request-id" in response.headers
         assert len(response.headers["x-request-id"]) > 0
+
+    def test_strips_whitespace_on_request_id(self, client):
+        response = client.get("/health", headers={"X-Request-ID": "  my-id  "})
+        assert response.headers.get("x-request-id") == "my-id"
+
+    def test_oversized_request_id_replaced(self, client):
+        long_id = "a" * 200
+        response = client.get("/health", headers={"X-Request-ID": long_id})
+        rid = response.headers.get("x-request-id")
+        assert rid is not None
+        assert len(rid) == 36
+        uuid.UUID(rid)
+
+    def test_control_char_in_request_id_replaced(self, client):
+        response = client.get("/health", headers={"X-Request-ID": "bad\nid"})
+        rid = response.headers.get("x-request-id")
+        assert rid != "bad\nid"
+        uuid.UUID(rid)
+
+
+class TestResolveXRequestId:
+    def test_none_generates_uuid(self):
+        rid = resolve_x_request_id(None)
+        assert len(rid) == 36
+        uuid.UUID(rid)
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("simple", "simple"),
+            ("  padded  ", "padded"),
+            ("a-z_0.9:", "a-z_0.9:"),
+        ],
+    )
+    def test_valid_values(self, raw: str, expected: str):
+        assert resolve_x_request_id(raw) == expected
+
+    def test_empty_after_strip_generates_uuid(self):
+        rid = resolve_x_request_id("   ")
+        uuid.UUID(rid)
 
 
 class TestListingsValidation:

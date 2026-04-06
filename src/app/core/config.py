@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    api_version: str = Field(default="2.1.0", description="API version string")
+    api_version: str = Field(default="2.1.1", description="API version string")
     docs_url: str | None = Field(
         default="/docs", description="OpenAPI documentation path"
     )
