@@ -618,6 +618,8 @@ class KleinanzeigenScraperService:
         )
         description_element = article.select_one("p.aditem-main--middle--description")
 
+        is_top = "is-topad" in article.parent.get("class", [])
+
         price = parse_price(price_element.get_text() if price_element else None)
 
         summary_data: dict[str, Any] = {
@@ -627,6 +629,7 @@ class KleinanzeigenScraperService:
             "price": price["amount"],
             "currency": price["currency"],
             "negotiable": price["negotiable"],
+            "is_top": is_top,
             "description": (
                 description_element.get_text(strip=True)
                 if description_element
