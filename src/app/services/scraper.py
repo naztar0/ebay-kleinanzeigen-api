@@ -133,6 +133,7 @@ class KleinanzeigenScraperService:
     async def fetch_listings(
         self,
         *,
+        raw_url: str | None = None,
         query: str | None = None,
         location: str | None = None,
         radius: int | None = None,
@@ -155,6 +156,7 @@ class KleinanzeigenScraperService:
         ) -> tuple[PageMetric, list[ListingSummary], bool, int | None]:
             return await self._fetch_listings_page(
                 page_number=page_number,
+                raw_url=raw_url,
                 query=query,
                 location=location,
                 radius=radius,
@@ -322,6 +324,7 @@ class KleinanzeigenScraperService:
     async def fetch_listings_with_details(
         self,
         *,
+        raw_url: str | None = None,
         query: str | None = None,
         location: str | None = None,
         radius: int | None = None,
@@ -334,6 +337,7 @@ class KleinanzeigenScraperService:
     ) -> list[DetailedListingItem]:
         """Fetch listing summaries then enrich each with its detail page."""
         listings, _, _ = await self.fetch_listings(
+            raw_url=raw_url,
             query=query,
             location=location,
             radius=radius,
@@ -373,6 +377,7 @@ class KleinanzeigenScraperService:
         self,
         *,
         page_number: int,
+        raw_url: str | None = None,
         query: str | None,
         location: str | None,
         radius: int | None,
@@ -388,6 +393,7 @@ class KleinanzeigenScraperService:
         start = time.perf_counter()
         url = self._build_search_url(
             page_number=page_number,
+            raw_url=raw_url,
             query=query,
             location=location,
             radius=radius,
@@ -495,6 +501,7 @@ class KleinanzeigenScraperService:
         self,
         *,
         page_number: int,
+        raw_url: str | None = None,
         query: str | None,
         location: str | None,
         radius: int | None,
@@ -502,6 +509,21 @@ class KleinanzeigenScraperService:
         max_price: int | None,
         sort_by: str | None = None,
     ) -> str:
+        if raw_url:
+            match = re.search(r"/seite:([0-9]+)", raw_url)
+            if page_number > 1:
+                if match:
+                    raw_url = raw_url.replace(
+                        f"/seite:{match.group(1)}", f"/seite:{page_number}"
+                    )
+                else:
+                    split_url = raw_url.split("/")
+                    split_url.insert(-1, f"seite:{page_number}")
+                    raw_url = "/".join(split_url)
+            elif match:
+                raw_url = raw_url.replace(f"/seite:{match.group(1)}", "")
+            return raw_url
+
         params: dict[str, Any] = {}
         if location:
             params["locationStr"] = location
